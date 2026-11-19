@@ -16,6 +16,6 @@ export const CONTACT = {
  * pour qu'il sache que c'est le bon destinataire.
  */
 export const DONS_DIRECTS = {
-  orangeMoney: { numero: "6 95 24 95 49", titulaire: "A" },
-  mtnMomo: { numero: "6 95 24 95 49", titulaire: "" },
+  orangeMoney: { numero: "6 95 24 95 49", titulaire: "" },
+  mtnMomo: { numero: "6 75 65 9936", titulaire: "" },
 };
