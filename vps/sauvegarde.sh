@@ -42,7 +42,13 @@ if [[ ${1:-} == --restaurer ]]; then
 fi
 
 "${COMPOSE[@]}" exec -T db pg_dump -U manga -Fc manga > "$DIR/base-$D.dump"
-"${COMPOSE[@]}" run --rm --no-deps -T -v "$PWD/$DIR:/sauvegarde" api tar czf "/sauvegarde/images-$D.tgz" -C /data storage
+# L'archive sort du conteneur par la sortie standard : c'est votre compte qui écrit le fichier,
+# le conteneur n'a pas besoin de droits sur le dossier sauvegardes/.
+if ! "${COMPOSE[@]}" run --rm --no-deps -T api tar czf - -C /data storage > "$DIR/images-$D.tgz"; then
+  rm -f "$DIR/images-$D.tgz"
+  echo "Échec de la sauvegarde des images (la base, elle, est sauvegardée)." >&2
+  exit 1
+fi
 find "$DIR" -name 'base-*.dump' -mtime +14 -delete
 find "$DIR" -name 'images-*.tgz' -mtime +14 -delete
 echo "$(date '+%F %T') sauvegarde : $DIR/base-$D.dump ($(du -h "$DIR/base-$D.dump" | cut -f1)), $DIR/images-$D.tgz ($(du -h "$DIR/images-$D.tgz" | cut -f1))"

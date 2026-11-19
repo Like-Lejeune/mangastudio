@@ -121,7 +121,7 @@ ATTENDUS = {
     "frontend/vite.config.ts": "08ce304175bfa22a",
     "vps/deployer.sh": "7e8075552cb9e1d7",
     "vps/nginx-mangastudio.conf": "ed5ad50dc85dc4f5",
-    "vps/sauvegarde.sh": "9c2964bd8c6f0379"
+    "vps/sauvegarde.sh": "d0af29dacde2516e"
 }
 VIDES = [
     "backend/app/__init__.py",
