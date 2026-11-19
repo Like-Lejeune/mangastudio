@@ -176,17 +176,6 @@ export function Accueil() {
         </Revele>
       </section>
 
-      <footer className="border-t-2 border-encre bg-papier">
-        <div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-4 px-4 py-8 text-[14px] text-encre-douce sm:px-6">
-          <img src="/brand/logo.svg" alt="MangaStudio" className="h-7 w-auto" />
-          <nav className="flex flex-wrap gap-x-6 gap-y-2" aria-label="Pied de page">
-            <a href="#tarifs" className="hover:text-encre">Tarifs</a>
-            <Link to="/connexion" className="hover:text-encre">Connexion</Link>
-            <Link to="/inscription" className="hover:text-encre">Créer un compte</Link>
-          </nav>
-          <p>© {new Date().getFullYear()} MangaStudio</p>
-        </div>
-      </footer>
     </div>
   );
 }

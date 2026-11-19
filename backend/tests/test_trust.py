@@ -98,3 +98,19 @@ async def test_payment_is_private(client, account, monkeypatch):
     h = {"Authorization": f"Bearer {other.json()['token']}"}
     assert (await client.get(f"/billing/payments/{ref}", headers=h)).status_code == 404
     assert (await client.post("/billing/checkout", headers=account, json={"product": "pack"})).status_code == 422
+
+
+async def test_don_montant_libre_sans_credit(client, account, monkeypatch):
+    fake, before = FakeTrust(monkeypatch), await credits(client, account)
+    base = {"product": "don", "phone": "+237 699 000 000", "operator": "MTN_CM"}
+    assert (await client.post("/billing/checkout", headers=account, json=base)).status_code == 422                      # montant manquant
+    assert (await client.post("/billing/checkout", headers=account, json={**base, "amount": 100})).status_code == 422   # sous 500 FCFA
+    r = await client.post("/billing/checkout", headers=account, json={**base, "amount": 2500})
+    assert r.status_code == 202
+    ref = r.json()["reference"]
+    assert fake.transactions[ref]["amount"] == 2500
+    fake.finish(ref)
+    body, headers = fake.webhook(ref)
+    assert (await client.post("/billing/webhooks/trust", content=body, headers=headers)).json()["applied"] is True
+    assert await credits(client, account) == before          # un don ne donne pas de crédits
+    assert (await client.get(f"/billing/payments/{ref}", headers=account)).json()["status"] == "paid"

@@ -83,8 +83,9 @@ async def overview(session: AsyncSession = Depends(get_session)):
     paying = Counter(p for p, end in subs if aware(end) > t)
 
     revenue = defaultdict(lambda: {"all": 0, "month": 0, "count": 0})
-    for amount, currency, created in (await session.execute(select(Payment.amount, Payment.currency, Payment.created_at))).all():
-        r = revenue[currency]
+    donations = {"all": 0, "month": 0, "count": 0}   # dons en FCFA, hors chiffre d'affaires
+    for amount, currency, created, product in (await session.execute(select(Payment.amount, Payment.currency, Payment.created_at, Payment.product))).all():
+        r = donations if product == "don" else revenue[currency]
         r["all"] += amount
         r["count"] += 1
         if aware(created) >= since:
@@ -111,7 +112,7 @@ async def overview(session: AsyncSession = Depends(get_session)):
         bump(c, "signups")
     for (c,) in (await session.execute(select(Episode.created_at).where(Episode.created_at >= since))).all():
         bump(c, "episodes")
-    for c, amount, cur in (await session.execute(select(Payment.created_at, Payment.amount, Payment.currency).where(Payment.created_at >= since))).all():
+    for c, amount, cur in (await session.execute(select(Payment.created_at, Payment.amount, Payment.currency).where(Payment.created_at >= since, Payment.product != "don"))).all():
         if cur == "XAF":
             bump(c, "revenue_xaf", amount)
     for c, cost in (await session.execute(select(UsageEvent.created_at, UsageEvent.cost_micro_usd).where(UsageEvent.created_at >= since))).all():
@@ -130,6 +131,7 @@ async def overview(session: AsyncSession = Depends(get_session)):
                   "new_30d": await scalar(select(func.count()).select_from(User).where(User.created_at >= since)),
                   "paying": {p: paying.get(p, 0) for p in ("creator", "studio")}},
         "revenue": dict(revenue),
+        "donations": donations,
         "payments": {"pending_30d": intents.get("pending", 0), "failed_30d": intents.get("failed", 0), "paid_30d": intents.get("paid", 0)},
         "episodes": {"total": sum(ep_status.values()), "by_status": dict(ep_status),
                      "running": sum(ep_status.get(s, 0) for s in ("queued", "designing", "writing", "moderating", "drawing"))},

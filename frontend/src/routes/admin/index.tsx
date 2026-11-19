@@ -31,7 +31,8 @@ function OverviewPage() {
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Utilisateurs" value={num(o.users.total)} sub={<>+{num(o.users.new_7d)} en 7 j · +{num(o.users.new_30d)} en 30 j{o.users.suspended ? ` · ${o.users.suspended} suspendu(s)` : ""}</>} />
         <Stat label="Abonnés payants" value={num(o.users.paying.creator + o.users.paying.studio)} sub={<>Créateur {num(o.users.paying.creator)} · Studio {num(o.users.paying.studio)}</>} />
-        <Stat label="Revenus 30 jours" value={fcfa(xaf.month)} sub={<>Depuis le début : {fcfa(xaf.all)} ({num(xaf.count)} paiements)</>} />
+        <Stat label="Revenus 30 jours" value={fcfa(xaf.month)}
+          sub={<>Depuis le début : {fcfa(xaf.all)} ({num(xaf.count)} paiements){o.donations?.count ? <> · Dons : {fcfa(o.donations.all)} ({num(o.donations.count)})</> : null}</>} />
         <Stat label="Coût IA 30 jours" value={usd(o.ai.cost_usd_30d)}
           sub={<>Depuis le début : {usd(o.ai.cost_usd_all)}{o.ai.cost_per_credit_usd !== null && <> · {usd(o.ai.cost_per_credit_usd, 3)} par crédit</>}</>} />
         <Stat label="Épisodes" value={num(o.episodes.total)} sub={<>{num(o.episodes.running)} en cours · {num(o.credits.images)} images dessinées</>} />

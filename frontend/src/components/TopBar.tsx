@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { LogOut } from "lucide-react";
+import { Heart, LogOut } from "lucide-react";
 import { tokenStore } from "@/lib/api";
 import { useMe, useToken } from "@/lib/session";
 import { Pill } from "./ink";
@@ -19,12 +19,16 @@ export function TopBar() {
         </Link>
         {token ? (
           <>
-            <nav className="flex items-center gap-1" aria-label="Navigation principale">
+            <nav className="flex flex-wrap items-center gap-x-1" aria-label="Navigation principale">
               <Link to="/" className={navCls} activeProps={{ className: "text-vermillon" }} activeOptions={{ exact: true }}>Mes séries</Link>
               <Link to="/abonnements" className={navCls} activeProps={{ className: "text-vermillon" }}>Abonnements</Link>
+              <Link to="/faq" className={navCls} activeProps={{ className: "text-vermillon" }}>FAQ</Link>
               {me?.is_admin && <Link to="/admin" className={navCls} activeProps={{ className: "text-vermillon" }}>Administration</Link>}
             </nav>
             <div className="ml-auto flex items-center gap-2">
+              <Link to="/soutenir" className="inline-flex min-h-11 items-center gap-1 rounded-[4px] px-2 font-bold text-vermillon hover:underline" aria-label="Nous soutenir">
+                <Heart size={18} strokeWidth={2.5} aria-hidden /><span className="hidden sm:inline">Soutenir</span>
+              </Link>
               {me && <Pill>Plan {me.plan.name}</Pill>}
               {me && <Pill tone="soleil"><span className="tabular">{me.credits}</span> crédits</Pill>}
               <button
@@ -37,7 +41,9 @@ export function TopBar() {
             </div>
           </>
         ) : token === null ? (
-          <div className="ml-auto flex gap-2">
+          <div className="ml-auto flex flex-wrap gap-2">
+            <Link to="/faq" className={navCls} activeProps={{ className: "text-vermillon" }}>FAQ</Link>
+            <Link to="/soutenir" className={navCls} activeProps={{ className: "text-vermillon" }}>Nous soutenir</Link>
             <Link to="/connexion" className={navCls}>Connexion</Link>
           </div>
         ) : null}

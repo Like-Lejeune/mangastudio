@@ -6,6 +6,7 @@ export type Daily = { date: string; signups: number; episodes: number; revenue_x
 export type Overview = {
   users: { total: number; suspended: number; new_7d: number; new_30d: number; paying: { creator: number; studio: number } };
   revenue: Record<string, { all: number; month: number; count: number }>;
+  donations: { all: number; month: number; count: number };
   payments: { pending_30d: number; failed_30d: number; paid_30d: number };
   episodes: { total: number; running: number; by_status: Record<string, number> };
   credits: { debited: number; outstanding: number; images: number };
@@ -55,7 +56,7 @@ export const dateTime = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—";
 export const day = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "—");
 
-export const PRODUCT_LABEL: Record<string, string> = { creator: "Plan Créateur", studio: "Plan Studio", pack: "Pack de crédits" };
+export const PRODUCT_LABEL: Record<string, string> = { creator: "Plan Créateur", studio: "Plan Studio", pack: "Pack de crédits", don: "Don" };
 export const PLAN_LABEL: Record<string, string> = { free: "Découverte", creator: "Créateur", studio: "Studio" };
 export const KIND_LABEL: Record<string, string> = { grant: "Attribution", reserve: "Réserve", refund: "Remboursement", expire: "Retrait ou expiration" };
 export const CHECKPOINT_LABEL: Record<string, string> = { input: "Saisie", script: "Scénario", image: "Image" };

@@ -44,6 +44,8 @@ async def operators(user: User = Depends(current_user)):
 async def checkout(body: CheckoutIn, user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
     """Démarre un paiement. Mobile money : le client valide sur son téléphone, puis le front
     interroge GET /billing/payments/{reference} jusqu'à `paid` ou `failed`."""
+    if body.product == "don" and (body.provider != "trust" or not body.amount):
+        raise HTTPException(422, "Un don se fait par mobile money, avec un montant d'au moins 500 FCFA.")
     if body.provider == "stripe":
         if not get_settings().stripe_secret_key:
             raise HTTPException(503, "Le paiement par carte n'est pas encore disponible.")
@@ -53,7 +55,7 @@ async def checkout(body: CheckoutIn, user: User = Depends(current_user), session
     if not body.phone or not body.operator:
         raise HTTPException(422, "Indiquez le numéro de téléphone et l'opérateur.")
     try:
-        intent = await trust.start(session, user, body.product, body.phone, body.operator)
+        intent = await trust.start(session, user, body.product, body.phone, body.operator, amount=body.amount)
     except tc.TrustChangeError as e:
         raise HTTPException(502, {"code": "payment_failed", "message": e.message}) from None
     return {**trust.intent_out(intent), "message": "Validez le paiement sur votre téléphone."}

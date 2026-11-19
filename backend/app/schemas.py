@@ -43,7 +43,9 @@ class RedrawIn(BaseModel):
 
 
 class CheckoutIn(BaseModel):
-    product: Literal["creator", "studio", "pack"]
+    product: Literal["creator", "studio", "pack", "don"]
+    # Pour un don seulement : montant libre en FCFA.
+    amount: int | None = Field(default=None, ge=500, le=1_000_000)
     provider: Literal["trust", "stripe"] = "trust"
     # Mobile money (trust) : numéro du payeur et code de l'opérateur, pris dans GET /billing/operators.
     phone: str | None = Field(default=None, pattern=r"^\+?[0-9 ]{8,18}$")

@@ -40,11 +40,11 @@ def _status(transaction: dict) -> str:
     return str(transaction.get("status") or "").upper()
 
 
-async def start(session: AsyncSession, user: User, product: str, phone: str, operator: str) -> PaymentIntent:
+async def start(session: AsyncSession, user: User, product: str, phone: str, operator: str, amount: int | None = None) -> PaymentIntent:
     """Crée l'intention puis lance l'encaissement. L'intention est enregistrée AVANT
     l'appel : si le réseau coupe, on garde la référence pour vérifier plus tard."""
     s = get_settings()
-    intent = PaymentIntent(reference=f"ms{new_id()}", user_id=user.id, product=product, amount=price_xaf(product),
+    intent = PaymentIntent(reference=f"ms{new_id()}", user_id=user.id, product=product, amount=amount if product == "don" else price_xaf(product),
                            currency="XAF", provider="trust", operator=operator)
     session.add(intent)
     await session.commit()

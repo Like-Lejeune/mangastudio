@@ -12,7 +12,7 @@ from app.models import Payment, Subscription, User, now
 from app.plans import PACK_CREDITS, PERIOD_DAYS, PLANS
 from app.services import aware
 
-PRODUCTS = ("creator", "studio", "pack")
+PRODUCTS = ("creator", "studio", "pack", "don")
 
 
 @dataclass
@@ -54,7 +54,9 @@ async def apply_event(session: AsyncSession, event: PaymentEvent) -> bool:
         return False
     session.add(Payment(user_id=event.user_id, provider=event.provider, external_ref=event.external_ref,
                         product=event.product, amount=event.amount, currency=event.currency))
-    if event.product == "pack":
+    if event.product == "don":
+        pass   # un don soutient la plateforme : rien à créditer, le paiement est seulement enregistré
+    elif event.product == "pack":
         await usage.grant(session, event.user_id, PACK_CREDITS, "pack", "pack de crédits")
     else:
         plan = PLANS[event.product]

@@ -13,7 +13,10 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AbonnementsRouteImport } from './routes/abonnements'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as ConnexionRouteImport } from './routes/connexion'
+import { Route as ContactRouteImport } from './routes/contact'
+import { Route as FaqRouteImport } from './routes/faq'
 import { Route as InscriptionRouteImport } from './routes/inscription'
+import { Route as SoutenirRouteImport } from './routes/soutenir'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminJournalRouteImport } from './routes/admin/journal'
 import { Route as AdminModerationRouteImport } from './routes/admin/moderation'
@@ -45,9 +48,24 @@ const ConnexionRoute = ConnexionRouteImport.update({
   path: '/connexion',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ContactRoute = ContactRouteImport.update({
+  id: '/contact',
+  path: '/contact',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FaqRoute = FaqRouteImport.update({
+  id: '/faq',
+  path: '/faq',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InscriptionRoute = InscriptionRouteImport.update({
   id: '/inscription',
   path: '/inscription',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SoutenirRoute = SoutenirRouteImport.update({
+  id: '/soutenir',
+  path: '/soutenir',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
@@ -106,7 +124,10 @@ export interface FileRoutesByFullPath {
   '/abonnements': typeof AbonnementsRoute
   '/admin': typeof AdminRouteWithChildren
   '/connexion': typeof ConnexionRoute
+  '/contact': typeof ContactRoute
+  '/faq': typeof FaqRoute
   '/inscription': typeof InscriptionRoute
+  '/soutenir': typeof SoutenirRoute
   '/admin/journal': typeof AdminJournalRoute
   '/admin/moderation': typeof AdminModerationRoute
   '/admin/paiements': typeof AdminPaiementsRoute
@@ -122,7 +143,10 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/abonnements': typeof AbonnementsRoute
   '/connexion': typeof ConnexionRoute
+  '/contact': typeof ContactRoute
+  '/faq': typeof FaqRoute
   '/inscription': typeof InscriptionRoute
+  '/soutenir': typeof SoutenirRoute
   '/admin/journal': typeof AdminJournalRoute
   '/admin/moderation': typeof AdminModerationRoute
   '/admin/paiements': typeof AdminPaiementsRoute
@@ -140,7 +164,10 @@ export interface FileRoutesById {
   '/abonnements': typeof AbonnementsRoute
   '/admin': typeof AdminRouteWithChildren
   '/connexion': typeof ConnexionRoute
+  '/contact': typeof ContactRoute
+  '/faq': typeof FaqRoute
   '/inscription': typeof InscriptionRoute
+  '/soutenir': typeof SoutenirRoute
   '/admin/journal': typeof AdminJournalRoute
   '/admin/moderation': typeof AdminModerationRoute
   '/admin/paiements': typeof AdminPaiementsRoute
@@ -159,7 +186,10 @@ export interface FileRouteTypes {
     | '/abonnements'
     | '/admin'
     | '/connexion'
+    | '/contact'
+    | '/faq'
     | '/inscription'
+    | '/soutenir'
     | '/admin/journal'
     | '/admin/moderation'
     | '/admin/paiements'
@@ -175,7 +205,10 @@ export interface FileRouteTypes {
     | '/'
     | '/abonnements'
     | '/connexion'
+    | '/contact'
+    | '/faq'
     | '/inscription'
+    | '/soutenir'
     | '/admin/journal'
     | '/admin/moderation'
     | '/admin/paiements'
@@ -192,7 +225,10 @@ export interface FileRouteTypes {
     | '/abonnements'
     | '/admin'
     | '/connexion'
+    | '/contact'
+    | '/faq'
     | '/inscription'
+    | '/soutenir'
     | '/admin/journal'
     | '/admin/moderation'
     | '/admin/paiements'
@@ -210,7 +246,10 @@ export interface RootRouteChildren {
   AbonnementsRoute: typeof AbonnementsRoute
   AdminRoute: typeof AdminRouteWithChildren
   ConnexionRoute: typeof ConnexionRoute
+  ContactRoute: typeof ContactRoute
+  FaqRoute: typeof FaqRoute
   InscriptionRoute: typeof InscriptionRoute
+  SoutenirRoute: typeof SoutenirRoute
   EpisodesIdRoute: typeof EpisodesIdRoute
   SeriesIdRoute: typeof SeriesIdRoute
 }
@@ -245,11 +284,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConnexionRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/contact': {
+      id: '/contact'
+      path: '/contact'
+      fullPath: '/contact'
+      preLoaderRoute: typeof ContactRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/faq': {
+      id: '/faq'
+      path: '/faq'
+      fullPath: '/faq'
+      preLoaderRoute: typeof FaqRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/inscription': {
       id: '/inscription'
       path: '/inscription'
       fullPath: '/inscription'
       preLoaderRoute: typeof InscriptionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/soutenir': {
+      id: '/soutenir'
+      path: '/soutenir'
+      fullPath: '/soutenir'
+      preLoaderRoute: typeof SoutenirRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/': {
@@ -354,7 +414,10 @@ const rootRouteChildren: RootRouteChildren = {
   AbonnementsRoute: AbonnementsRoute,
   AdminRoute: AdminRouteWithChildren,
   ConnexionRoute: ConnexionRoute,
+  ContactRoute: ContactRoute,
+  FaqRoute: FaqRoute,
   InscriptionRoute: InscriptionRoute,
+  SoutenirRoute: SoutenirRoute,
   EpisodesIdRoute: EpisodesIdRoute,
   SeriesIdRoute: SeriesIdRoute,
 }
