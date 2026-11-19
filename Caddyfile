@@ -1,4 +1,13 @@
 # Certificats HTTPS obtenus et renouvelés automatiquement pour les deux domaines.
+# Validation par le port 443 seul (TLS-ALPN) : ça marche même quand le port 80 du VPS
+# appartient à un autre serveur web (nginx, apache…).
+(certificat) {
+	tls {
+		issuer acme {
+			disable_http_challenge
+		}
+	}
+}
 
 # En-têtes de sécurité communs aux deux domaines.
 (securite) {
@@ -13,6 +22,7 @@
 
 # Le front : fichiers statiques ; toute adresse inconnue renvoie index.html (application à page unique).
 {$APP_DOMAIN} {
+	import certificat
 	import securite
 	# Le site ne charge que ses propres fichiers et parle seulement à l'API ; il ne peut pas être affiché dans un cadre.
 	header Content-Security-Policy "default-src 'self'; img-src 'self' data: blob: https://{$API_DOMAIN}; connect-src 'self' https://{$API_DOMAIN}; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
@@ -27,6 +37,7 @@
 
 # L'API.
 {$API_DOMAIN} {
+	import certificat
 	import securite
 	encode gzip
 	request_body {

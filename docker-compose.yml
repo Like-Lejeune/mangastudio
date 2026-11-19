@@ -53,7 +53,9 @@ services:
       args:
         VITE_API_URL: https://${API_DOMAIN}
     ports:
-      - "80:80"
+      # Si le port 80 du VPS sert déjà un autre site, deployer.sh met CADDY_HTTP_PORT=127.0.0.1:8081 :
+      # Caddy n'y écoute plus que pour lui-même, et le HTTPS (443) reste à Caddy.
+      - "${CADDY_HTTP_PORT:-80}:80"
       - "443:443"
     environment:
       API_DOMAIN: ${API_DOMAIN}

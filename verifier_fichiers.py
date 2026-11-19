@@ -11,8 +11,8 @@ ATTENDUS = {
     ".env.production.example": "31a8504ae25de007",
     ".gitattributes": "83d39627ed864dda",
     ".gitignore": "46ff76ba1988f067",
-    "Caddyfile": "64936b6c3d8a7987",
-    "DEPLOIEMENT.md": "d421b3e299dd9df0",
+    "Caddyfile": "b494d7f8c9816d78",
+    "DEPLOIEMENT.md": "c61675a3d8bc9464",
     "README.md": "d470eb36f41a1c43",
     "TEST_LOCAL.md": "4a2d2d87672a1e86",
     "backend/.dockerignore": "1ee897f5df60df4d",
@@ -78,7 +78,7 @@ ATTENDUS = {
     "deploy.bat": "88952071cbf06845",
     "deploy.ps1": "6767010284b6da5d",
     "deploy.sh": "8ab91870f5c4f0c0",
-    "docker-compose.yml": "e51f6cf0c1a0c6aa",
+    "docker-compose.yml": "78ef9d6bd7623474",
     "frontend/.env.example": "eaa8503379c11ade",
     "frontend/Dockerfile": "ecdb3d5cf34d24f0",
     "frontend/index.html": "2d760d9159cc40df",
@@ -118,7 +118,7 @@ ATTENDUS = {
     "frontend/src/styles.css": "6b5e9e7a6b094abc",
     "frontend/tsconfig.json": "357e4358413314b2",
     "frontend/vite.config.ts": "08ce304175bfa22a",
-    "vps/deployer.sh": "a35bbf5cd71392f1",
+    "vps/deployer.sh": "2b7f9c7ac755236d",
     "vps/sauvegarde.sh": "9c2964bd8c6f0379"
 }
 VIDES = [

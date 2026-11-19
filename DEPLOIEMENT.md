@@ -80,6 +80,32 @@ Pour tester le classeur de scènes interdites avec le vrai modèle (20 cas inter
 docker compose exec api python -m scripts.test_scenes
 ```
 
+## Port 80 déjà utilisé par un autre site
+
+Si un autre serveur web (nginx, apache) tient déjà le port 80 du VPS, `vps/deployer.sh` le lui laisse. Il ajoute `CADDY_HTTP_PORT=127.0.0.1:8081` dans `.env.production`, et Caddy garde le port 443 : les certificats sont validés par le 443 seul. Le site reste à `https://…`, sans numéro de port.
+
+Il reste une chose à faire une fois : renvoyer `http://` vers `https://` pour les deux sous-domaines. Sinon, un visiteur qui tape l'adresse sans le « s » arrive sur l'autre site.
+
+Avec **nginx** :
+
+```bash
+sudo tee /etc/nginx/sites-available/mangastudio-redirection >/dev/null <<'NGINX'
+server {
+    listen 80;
+    listen [::]:80;
+    server_name mangastudio.psikalab.space apimangastudio.psikalab.space;
+    return 301 https://$host$request_uri;
+}
+NGINX
+sudo ln -sf /etc/nginx/sites-available/mangastudio-redirection /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+curl -sI http://mangastudio.psikalab.space | head -3      # doit répondre 301 vers https://
+```
+
+Avec **apache** : un `<VirtualHost *:80>` avec `ServerName mangastudio.psikalab.space`, `ServerAlias apimangastudio.psikalab.space` et `Redirect permanent / https://mangastudio.psikalab.space/`. Pour l'API, la même chose avec son domaine.
+
+Attention : le port 443 doit rester à MangaStudio. Ne lancez pas `certbot --nginx` pour un autre site de ce VPS : nginx prendrait le 443 et Caddy ne pourrait plus démarrer.
+
 ## Modifier la base de données
 
 La structure de la base est gérée par des migrations (Alembic), appliquées toutes seules à chaque démarrage de l'API. Après une modification de `backend/app/models.py`, sur votre poste :
