@@ -125,7 +125,8 @@ info "7. Construction et démarrage (quelques minutes la première fois)"
 ok "conteneurs lancés"
 
 info "8. Contrôle de sécurité"
-"${COMPOSE[@]}" run --rm --no-deps -v "$RACINE:/repo:ro" api \
+# Sous votre propre compte : .env.production (chmod 600) n'est lisible que par vous.
+"${COMPOSE[@]}" run --rm --no-deps --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$RACINE:/repo:ro" api \
   python -m scripts.controle_securite --racine /repo --env /repo/"$ENV_FILE" \
   || stop "Le contrôle de sécurité a trouvé un point à corriger (voir ci-dessus)."
 

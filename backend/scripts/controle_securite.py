@@ -1,7 +1,7 @@
 """Liste de contrôle de sécurité avant la mise en ligne.
 
     Sur votre machine, depuis backend :   python -m scripts.controle_securite --env ../.env.production
-    Sur le VPS, depuis mangastudio :      docker compose run --rm -v "$PWD:/repo:ro" api \\
+    Sur le VPS, depuis mangastudio :      docker compose run --rm --no-deps --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/repo:ro" api \\
                                             python -m scripts.controle_securite --racine /repo --env /repo/.env.production
 
 Vérifie : secrets hors du dépôt git, aucune clé écrite en dur dans le code, configuration de

@@ -13,7 +13,7 @@ ATTENDUS = {
     ".gitignore": "46ff76ba1988f067",
     "Caddyfile": "b494d7f8c9816d78",
     "Caddyfile.proxy": "f7e27076c4012f8e",
-    "DEPLOIEMENT.md": "badef5a070a41293",
+    "DEPLOIEMENT.md": "6573de55c47fcbdb",
     "README.md": "d470eb36f41a1c43",
     "TEST_LOCAL.md": "4a2d2d87672a1e86",
     "backend/.dockerignore": "1ee897f5df60df4d",
@@ -64,7 +64,7 @@ ATTENDUS = {
     "backend/pytest.ini": "40b68664e0888847",
     "backend/requirements.txt": "4a906c86317d03b2",
     "backend/scripts/banc_essai.py": "22eabe1195632fa2",
-    "backend/scripts/controle_securite.py": "9f1e419f77255f75",
+    "backend/scripts/controle_securite.py": "b6313f80617fc357",
     "backend/scripts/parcours_local.py": "d6d6f47ef24c16f2",
     "backend/scripts/test_scenes.py": "80a73dd938112afc",
     "backend/tests/conftest.py": "4685d06b73c1b4ed",
@@ -119,7 +119,7 @@ ATTENDUS = {
     "frontend/src/styles.css": "6b5e9e7a6b094abc",
     "frontend/tsconfig.json": "357e4358413314b2",
     "frontend/vite.config.ts": "08ce304175bfa22a",
-    "vps/deployer.sh": "d0dcb4b81a61ccc7",
+    "vps/deployer.sh": "7e8075552cb9e1d7",
     "vps/nginx-mangastudio.conf": "ed5ad50dc85dc4f5",
     "vps/sauvegarde.sh": "9c2964bd8c6f0379"
 }

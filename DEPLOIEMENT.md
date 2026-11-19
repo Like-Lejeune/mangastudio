@@ -63,7 +63,7 @@ L'API refuse de démarrer en production si la configuration est dangereuse : `SE
 Liste de contrôle complète (secrets hors de git, configuration, en-têtes HTTPS) :
 
 ```bash
-docker compose run --rm -v "$PWD:/repo:ro" api python -m scripts.controle_securite --racine /repo --env /repo/.env.production
+docker compose run --rm --no-deps --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/repo:ro" api python -m scripts.controle_securite --racine /repo --env /repo/.env.production
 ```
 
 Ce qui est en place :
