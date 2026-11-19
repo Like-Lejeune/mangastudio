@@ -1,0 +1,25 @@
+# Secrets : jamais dans le dépôt
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# Données locales
+*.db
+backend/storage/
+storage/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Journaux du déploiement local
+.logs/
+
+# Node
+node_modules/
+dist/
+.tanstack/

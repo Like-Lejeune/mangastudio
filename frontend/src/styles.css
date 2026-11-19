@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+/* Charte MangaStudio : « encre sur papier ». Le thème sombre ne sert qu'au lecteur plein écran (.dark). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --papier: #f7f3ea;
+  --bulle: #fffdf8;
+  --encre: #14110f;
+  --encre-douce: #5e584c;
+  --trait: #d9d2c3;
+  --vermillon: #d9361e;
+  --sur-vermillon: #fffdf8;
+  --soleil: #ffc83d;
+  --sur-soleil: #14110f;
+  --indigo: #2b3a8c;
+  --succes: #1b7a4b;
+  --alerte: #b3261e;
+}
+.dark {
+  --papier: #14110f;
+  --bulle: #1f1b17;
+  --encre: #f7f3ea;
+  --encre-douce: #b5ad9c;
+  --trait: #3a342c;
+  --vermillon: #ff5a3d;
+  --sur-vermillon: #14110f;
+  --indigo: #9aa8ff;
+  --succes: #5fd39a;
+  --alerte: #ff8a80;
+}
+
+@theme inline {
+  --color-papier: var(--papier);
+  --color-bulle: var(--bulle);
+  --color-encre: var(--encre);
+  --color-encre-douce: var(--encre-douce);
+  --color-trait: var(--trait);
+  --color-vermillon: var(--vermillon);
+  --color-sur-vermillon: var(--sur-vermillon);
+  --color-soleil: var(--soleil);
+  --color-sur-soleil: var(--sur-soleil);
+  --color-indigo: var(--indigo);
+  --color-succes: var(--succes);
+  --color-alerte: var(--alerte);
+  --color-blanc: #ffffff;
+
+  --font-sans: "DM Sans", system-ui, sans-serif;
+  --font-display: "Dela Gothic One", "Arial Black", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-bangers: "Bangers", "Dela Gothic One", sans-serif;
+
+  --shadow-ink-sm: 2px 2px 0 var(--encre);
+  --shadow-ink: 4px 4px 0 var(--encre);
+  --shadow-ink-lg: 6px 6px 0 var(--encre);
+}
+
+@layer base {
+  body {
+    background: var(--papier);
+    color: var(--encre);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 24px;
+  }
+  :focus-visible {
+    outline: 3px solid var(--vermillon);
+    outline-offset: 2px;
+  }
+  button:not(:disabled),
+  label,
+  select {
+    cursor: pointer;
+  }
+}
+
+/* Étiquette en capitales */
+@utility label-caps {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--encre-douce);
+}
+/* Chiffres comparés : police à chasse fixe */
+@utility tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+/* Trame de points : emplacements vides (page en cours, couverture absente) */
+@utility trame {
+  background-color: var(--papier);
+  background-image: radial-gradient(var(--encre) 24%, transparent 26%);
+  background-size: 12px 12px;
+}

@@ -1,0 +1,69 @@
+# Production sur le VPS : front, API, worker de génération, PostgreSQL, Redis, HTTPS automatique (Caddy).
+# Lancer :  docker compose --env-file .env.production up -d --build
+# Les secrets sont dans .env.production (jamais dans git).
+
+x-backend: &backend
+  build: ./backend
+  env_file: .env.production
+  environment:
+    DATABASE_URL: postgresql+asyncpg://manga:${POSTGRES_PASSWORD}@db:5432/manga
+    REDIS_URL: redis://redis:6379
+    STORAGE_DIR: /data/storage
+  volumes:
+    - storage:/data/storage
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_started
+  restart: unless-stopped
+
+services:
+  api:
+    <<: *backend
+
+  worker:
+    <<: *backend
+    command: ["arq", "app.worker.WorkerSettings"]
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: manga
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: manga
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U manga"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  # Caddy : sert le front (construit dans l'image), relaie l'API, gère le HTTPS.
+  caddy:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_URL: https://${API_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_DOMAIN: ${API_DOMAIN}
+      APP_DOMAIN: ${APP_DOMAIN}
+    volumes:
+      - caddy_data:/data
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  storage:
+  caddy_data:

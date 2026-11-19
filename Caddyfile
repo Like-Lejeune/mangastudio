@@ -1,0 +1,20 @@
+# Certificats HTTPS obtenus et renouvelés automatiquement pour les deux domaines.
+
+# Le front : fichiers statiques ; toute adresse inconnue renvoie index.html (application à page unique).
+{$APP_DOMAIN} {
+	encode gzip
+	root * /srv/app
+	try_files {path} /index.html
+	file_server
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+}
+
+# L'API.
+{$API_DOMAIN} {
+	encode gzip
+	request_body {
+		max_size 8MB
+	}
+	reverse_proxy api:8000
+}
