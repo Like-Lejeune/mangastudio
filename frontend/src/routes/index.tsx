@@ -5,7 +5,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { api, type SeriesItem } from "@/lib/api";
 import { useMe, useToken } from "@/lib/session";
-import { Button, Card, Container, ErrorNote, Field, Onomatopee, PageTitle, Textarea, btnClass } from "@/components/ink";
+import { Accueil } from "@/components/accueil/Accueil";
+import { Button, Card, Container, ErrorNote, Field, PageTitle, Textarea } from "@/components/ink";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
@@ -26,44 +27,6 @@ function Index() {
   const token = useToken();
   if (token === undefined) return null;
   return token ? <MesSeries /> : <Accueil />;
-}
-
-function Accueil() {
-  return (
-    <Container>
-      <section className="grid items-center gap-12 py-8 lg:grid-cols-[1.2fr_1fr]">
-        <div>
-          <p className="label-caps mb-4">Studio de manga en ligne</p>
-          <h1 className="font-display text-[40px] leading-[44px] sm:text-[64px] sm:leading-[66px]">Votre idée. Vos personnages. Votre manga.</h1>
-          <p className="mt-6 max-w-xl text-[18px] leading-7 text-encre-douce">
-            Décrivez une histoire en quelques lignes, présentez vos personnages, et MangaStudio écrit le scénario puis dessine chaque page de votre épisode.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-4">
-            <Link to="/inscription" className={btnClass("primary")}>Créer mon premier épisode</Link>
-            <Link to="/inscription" className={btnClass()}>Voir les abonnements</Link>
-          </div>
-        </div>
-        <div className="relative mx-auto w-full max-w-sm">
-          <div className="grid aspect-[2/3] grid-cols-2 grid-rows-3 gap-2 border-2 border-encre bg-blanc p-2 shadow-ink-lg">
-            <div className="col-span-2 trame border-2 border-encre" />
-            <div className="border-2 border-encre bg-bulle" />
-            <div className="trame border-2 border-encre" />
-            <div className="col-span-2 border-2 border-encre bg-bulle" />
-          </div>
-          <Onomatopee className="absolute -right-2 top-6">ZAP !</Onomatopee>
-        </div>
-      </section>
-      <section className="mt-16 grid gap-6 md:grid-cols-3">
-        {[
-          ["1. L'idée", "Une phrase ou une page : le pitch de votre série, son style et sa langue."],
-          ["2. Les personnages", "Nom, rôle, description et, si vous le souhaitez, une photo. Chacun reçoit sa fiche modèle."],
-          ["3. L'épisode", "Le scénario est écrit, vérifié, puis chaque page est dessinée sous vos yeux."],
-        ].map(([t, d]) => (
-          <Card key={t}><h2 className="font-display text-[24px] leading-[30px]">{t}</h2><p className="mt-3 text-encre-douce">{d}</p></Card>
-        ))}
-      </section>
-    </Container>
-  );
 }
 
 const STYLES = [["shonen", "Shōnen"], ["shojo", "Shōjo"], ["seinen", "Seinen"], ["kodomo", "Kodomo"]] as const;

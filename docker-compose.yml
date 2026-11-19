@@ -6,6 +6,7 @@ x-backend: &backend
   build: ./backend
   env_file: .env.production
   environment:
+    ENVIRONMENT: production   # contrôles de démarrage, CORS strict, pas de /docs public
     DATABASE_URL: postgresql+asyncpg://manga:${POSTGRES_PASSWORD}@db:5432/manga
     REDIS_URL: redis://redis:6379
     STORAGE_DIR: /data/storage

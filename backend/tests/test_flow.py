@@ -1,8 +1,10 @@
 """Parcours complet : limites du plan, génération, compteur, crédits, paiement, modération."""
 import asyncio
 
+from sqlalchemy import update
+
 from app.db import SessionLocal
-from app.models import Episode
+from app.models import Episode, User
 from app.pipeline import runner
 from app.providers import get_studio
 from app.providers.base import TextResult, Usage
@@ -23,7 +25,11 @@ async def test_full_flow(client, monkeypatch):
     r = await client.post("/auth/register", json={"email": "a@b.cm", "display_name": "Yves", "password": "motdepasse"})
     h = {"Authorization": f"Bearer {r.json()['token']}"}
     me = (await client.get("/me", headers=h)).json()
-    assert me["credits"] == 12 and me["plan"]["id"] == "free" and me["is_admin"]
+    assert me["credits"] == 12 and me["plan"]["id"] == "free"
+    # Administrateur pour la partie modération (le premier compte de la base l'est, mais l'ordre des tests varie).
+    async with SessionLocal() as session:
+        await session.execute(update(User).where(User.id == me["id"]).values(is_admin=True))
+        await session.commit()
 
     # Plan gratuit : pas de couleur.
     r = await client.post("/series", headers=h, json={"premise": "Quatre amis ratent le dernier bus.", "palette": "color"})

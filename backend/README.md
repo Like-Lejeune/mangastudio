@@ -26,6 +26,7 @@ Le premier compte créé est administrateur.
 | `app/moderation.py` | Mots bloqués, scènes interdites, journal |
 | `app/usage.py` | Journal d'usage (tokens, images) et crédits |
 | `app/providers/` | Fournisseurs IA interchangeables (`fake`, `openai_compat`) |
+| `migrations/` | Migrations de la base (Alembic), appliquées au démarrage |
 | `app/billing/` | Paiements : TrustChange (mobile money, `trust.py` + `trustchange_client.py`), Stripe |
 | `app/routers/` | Routes HTTP |
 
@@ -38,7 +39,6 @@ Pour un fournisseur au format différent : une classe dans `app/providers/` qui 
 
 ## Avant la production
 
-- Migrations Alembic à la place de `init_db()`.
 - `REDIS_URL` + `arq app.worker.WorkerSettings` pour les tâches de fond.
 - Stockage S3/R2 à la place du disque (`app/storage.py`).
 - TrustChange : confirmer les noms d'en-têtes du webhook et les libellés de statut (variables `TRUSTCHANGE_*` du `.env`).

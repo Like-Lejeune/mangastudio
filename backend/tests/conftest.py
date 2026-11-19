@@ -24,3 +24,11 @@ async def client():
     await init_db()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _sans_limite_de_tentatives():
+    """Les tests créent beaucoup de comptes depuis la même adresse : compteurs remis à zéro à chaque test."""
+    from app import ratelimit
+    ratelimit.clear_all()
+    yield

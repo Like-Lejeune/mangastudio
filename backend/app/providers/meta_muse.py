@@ -16,7 +16,13 @@ import re
 
 import httpx
 
-from app.providers.base import ContentBlocked, ImageResult, ProviderError, TextResult, Usage
+from app.providers.base import (
+    ContentBlocked,
+    ImageResult,
+    ProviderError,
+    TextResult,
+    Usage,
+)
 
 MAX_REFERENCES = 10
 RETRIES = 5

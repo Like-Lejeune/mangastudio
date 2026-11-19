@@ -1,0 +1,14 @@
+# Fins de ligne fixées par le dépôt, quel que soit le réglage Git de chaque poste :
+# tout ce qui tourne sur le VPS (Linux) reste en LF, les scripts Windows restent en CRLF.
+* text=auto eol=lf
+
+*.bat  text eol=crlf
+*.ps1  text eol=crlf
+
+*.png  binary
+*.jpg  binary
+*.webp binary
+*.ico  binary
+*.woff binary
+*.woff2 binary
+*.zip  binary

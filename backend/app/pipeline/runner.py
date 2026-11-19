@@ -11,12 +11,19 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app import moderation, storage, usage
+from app import budget, moderation, storage, usage
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import Character, Episode, EpisodeCharacter, Page, Series, UsageEvent
 from app.pipeline import prompts
-from app.pipeline.script import (ScriptIncomplete, batch_schema, normalise_pages, outline_schema, script_schema, script_text)
+from app.pipeline.script import (
+    ScriptIncomplete,
+    batch_schema,
+    normalise_pages,
+    outline_schema,
+    script_schema,
+    script_text,
+)
 from app.providers import Studio, get_studio
 from app.providers.base import ContentBlocked, ProviderError, Usage
 
@@ -86,6 +93,10 @@ async def run_episode(episode_id: str, studio: Studio | None = None) -> None:
         episode.status, episode.error = status, error
         await usage.settle(session, user_id, episode_id, await delivered_images(session, episode_id))
         await session.commit()
+        try:
+            await budget.alert_if_needed(session)   # alerte dès qu'un épisode fait franchir un seuil
+        except Exception:  # noqa: BLE001  (une alerte ratée ne doit pas toucher l'épisode)
+            log.exception("alerte de budget")
 
 
 async def _run(session: AsyncSession, episode: Episode, studio: Studio, user_id: str) -> None:

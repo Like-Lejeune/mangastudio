@@ -59,3 +59,24 @@ class SceneRuleIn(BaseModel):
     label: str = Field(min_length=2, max_length=60)
     description: str = Field(min_length=5, max_length=500)
     active: bool = True
+
+
+class AdminCreditsIn(BaseModel):
+    amount: int = Field(ge=-100_000, le=100_000)   # négatif : retrait
+    reason: str = Field(min_length=3, max_length=200)
+
+
+class AdminPlanIn(BaseModel):
+    plan: Literal["free", "creator", "studio"]
+    days: int = Field(default=30, ge=1, le=366)
+    grant_credits: bool = True
+    reason: str = Field(min_length=3, max_length=200)
+
+
+class AdminStatusIn(BaseModel):
+    active: bool
+    reason: str = Field(min_length=3, max_length=200)
+
+
+class AdminRoleIn(BaseModel):
+    is_admin: bool

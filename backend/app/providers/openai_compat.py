@@ -10,7 +10,13 @@ import json
 
 import httpx
 
-from app.providers.base import ContentBlocked, ImageResult, ProviderError, TextResult, Usage
+from app.providers.base import (
+    ContentBlocked,
+    ImageResult,
+    ProviderError,
+    TextResult,
+    Usage,
+)
 
 RETRIES = 5
 

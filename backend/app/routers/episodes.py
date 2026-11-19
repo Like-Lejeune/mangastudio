@@ -4,7 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app import storage, usage
+from app import budget, storage, usage
 from app.db import get_session
 from app.models import Episode, EpisodeCharacter, Page, Series, User
 from app.pipeline.runner import remaining_images
@@ -64,6 +64,7 @@ async def create_episode(series_id: str, body: EpisodeIn, user: User = Depends(c
         raise HTTPException(422, "Un des personnages n'appartient pas à cette série.")
 
     await refuse_blocked(session, user, body.direction)
+    await budget.guard(session)
 
     number = (await session.execute(select(func.coalesce(func.max(Episode.number), 0)).where(Episode.series_id == series.id))).scalar_one() + 1
     episode = Episode(series_id=series.id, number=number, direction=body.direction, page_count=body.page_count)
@@ -77,10 +78,8 @@ async def create_episode(series_id: str, body: EpisodeIn, user: User = Depends(c
     return {"id": episode.id, "number": number, "status": episode.status}
 
 
-@router.get("/episodes/{episode_id}")
-async def get_episode(episode_id: str, user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
-    """État complet de l'épisode ; le frontend l'interroge toutes les 2 s pendant la génération."""
-    e = await owned_episode(session, user, episode_id)
+async def episode_out(session: AsyncSession, e: Episode) -> dict:
+    """État complet d'un épisode (épisode chargé avec ses pages, sa série et sa distribution)."""
     return {
         "id": e.id, "series_id": e.series_id, "number": e.number, "title": e.title, "status": e.status, "error": e.error,
         "page_count": e.page_count, "direction": e.direction, "summary": e.summary,
@@ -89,6 +88,12 @@ async def get_episode(episode_id: str, user: User = Depends(current_user), sessi
                    "editor_note": p.editor_note} for p in e.pages],
         "usage": await usage.episode_usage(session, e.id),
     }
+
+
+@router.get("/episodes/{episode_id}")
+async def get_episode(episode_id: str, user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
+    """État complet de l'épisode ; le frontend l'interroge toutes les 2 s pendant la génération."""
+    return await episode_out(session, await owned_episode(session, user, episode_id))
 
 
 @router.get("/episodes/{episode_id}/usage")
@@ -104,6 +109,7 @@ async def resume(episode_id: str, user: User = Depends(current_user), session: A
     e = await owned_episode(session, user, episode_id)
     if e.status != "failed":
         raise HTTPException(409, "Seul un épisode interrompu peut être repris.")
+    await budget.guard(session)
     for p in e.pages:
         if p.status == "failed":
             p.status = "pending"
@@ -127,6 +133,7 @@ async def redraw(page_id: str, body: RedrawIn, user: User = Depends(current_user
     if e.status in RUNNING or e.script is None:
         raise HTTPException(409, "L'épisode est encore en cours de génération.")
     await refuse_blocked(session, user, body.note)
+    await budget.guard(session)
     try:
         await usage.reserve(session, user.id, e.id, 1)
     except usage.InsufficientCredits as err:

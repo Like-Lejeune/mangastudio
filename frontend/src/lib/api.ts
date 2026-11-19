@@ -61,6 +61,7 @@ export async function api<T>(path: string, opts: { method?: string; body?: unkno
 // ─── Formes renvoyées par l'API MangaStudio ──────────────────────────────────
 export type Plan = { id: string; name: string; max_characters: number; max_pages: number; color: boolean; redraw: boolean };
 export type Me = {
+  id: string; email: string; is_admin: boolean;
   display_name: string; credits: number; plan: Plan;
   subscription?: { status: string; provider: string; period_end: string } | null;
 };

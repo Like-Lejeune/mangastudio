@@ -9,6 +9,7 @@ import sys
 ATTENDUS = {
     ".dockerignore": "95888391a7bfdc19",
     ".env.production.example": "31a8504ae25de007",
+    ".gitattributes": "83d39627ed864dda",
     ".gitignore": "46ff76ba1988f067",
     "Caddyfile": "64936b6c3d8a7987",
     "DEPLOIEMENT.md": "d421b3e299dd9df0",
@@ -117,7 +118,7 @@ ATTENDUS = {
     "frontend/src/styles.css": "6b5e9e7a6b094abc",
     "frontend/tsconfig.json": "357e4358413314b2",
     "frontend/vite.config.ts": "08ce304175bfa22a",
-    "vps/deployer.sh": "a7c13539086b4129",
+    "vps/deployer.sh": "a35bbf5cd71392f1",
     "vps/sauvegarde.sh": "9c2964bd8c6f0379"
 }
 VIDES = [

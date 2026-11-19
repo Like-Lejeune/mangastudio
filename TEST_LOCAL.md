@@ -57,18 +57,20 @@ Ajoutez dans `backend\.env` une clé de test `TRUSTCHANGE_API_KEY=tc_test_...` e
 
 ## 7. Modération
 
-Sur http://localhost:8000/docs : `POST /auth/login`, copiez le jeton dans « Authorize », puis `POST /admin/terms` avec `{"term": "un mot", "action": "block"}`. Une série ou un épisode contenant ce mot doit être refusé. Seul le premier compte créé dans la base est administrateur.
+Mettez votre adresse dans `ADMIN_EMAILS` du fichier `backend\.env`, relancez, puis connectez-vous : le lien **Administration** apparaît. Une liste de départ (65 mots, 6 scènes interdites) est déjà chargée. *Administration › Modération* permet d'ajouter un mot : une série ou un épisode qui le contient est refusé.
+
+Les 20 cas interdits du planning se vérifient avec `.venv\Scripts\python -m pytest tests\test_moderation_liste.py`. Le classeur de scènes avec Muse se vérifie avec `.venv\Scripts\python -m scripts.test_scenes` (clés Muse dans le `.env`).
 
 ## Repartir de zéro
 
-Fermez les deux fenêtres, supprimez `backend\dev.db` et le dossier `backend\storage`, relancez. À faire aussi après toute mise à jour de `backend\app\models.py`.
+Fermez les deux fenêtres, supprimez `backend\dev.db` et le dossier `backend\storage`, relancez. Ce n'est plus nécessaire après une mise à jour : la base se met à niveau toute seule au démarrage, en gardant vos données.
 
 ## En cas de problème
 
 | Symptôme | Cause probable |
 | --- | --- |
 | « Le port 8000 est déjà utilisé » | Une fenêtre « MangaStudio - API » est encore ouverte : fermez-la |
-| `no such table` ou `no such column` | Base créée avec une ancienne version : supprimez `backend\dev.db` |
+| `no such table` ou `no such column` | Une migration manque : relancez `deploy.bat` ; en dernier recours, supprimez `backend\dev.db` |
 | Le front affiche « Le studio est injoignable » | L'API n'est pas lancée |
 | Épisode « Interrompu » avec les vrais modèles | L'erreur de Meta est écrite dans la fenêtre de l'API. Envoyez-la-moi |
 | `npm install` échoue | Vérifiez la connexion, puis relancez `deploy.bat` : il reprend où il s'est arrêté |

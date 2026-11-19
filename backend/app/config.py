@@ -8,12 +8,33 @@ class Settings(BaseSettings):
     # utf-8 explicite : sous Windows, le .env serait sinon lu en cp1252 et les accents le casseraient.
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
+    # "production" active les contrôles de démarrage et ferme l'API aux origines locales.
+    environment: str = "development"
     database_url: str = "sqlite+aiosqlite:///./dev.db"
     secret_key: str = "dev-secret-a-changer-en-production-0123456789"
     public_base_url: str = "http://localhost:8000"
     frontend_url: str = "http://localhost:5173"
     storage_dir: str = "./storage"
     redis_url: str | None = None
+    # Comptes administrateurs : adresses séparées par des virgules. Ils le deviennent à l'inscription
+    # ou à la connexion suivante. Aucun autre moyen de devenir administrateur que celui-ci ou l'admin.
+    admin_emails: str = ""
+
+    # Limites de tentatives (par adresse IP du visiteur)
+    login_max_failures: int = 5          # échecs pour un même compte, puis attente
+    login_max_failures_ip: int = 30      # échecs tous comptes confondus
+    login_window_minutes: int = 15
+    register_max_per_hour: int = 10
+    # Photo d'un personnage, une fois décodée
+    max_photo_bytes: int = 3_000_000
+
+    # Plafond de dépense IA par jour (dollars, coût calculé avec PRICES). 0 = pas de plafond.
+    # Au-delà, les nouveaux épisodes et redessins sont refusés jusqu'au lendemain ; ceux en cours se terminent.
+    ai_daily_budget_usd: float = 0
+    ai_alert_ratio: float = 0.8          # première alerte à 80 % du plafond
+    budget_timezone: str = "Africa/Douala"
+    # Adresse qui reçoit les alertes en JSON {"text", "content"} : webhook Slack, Discord, Google Chat…
+    alert_webhook_url: str = ""
 
     # Un fournisseur et un modèle par rôle : on change de modèle sans toucher au code.
     writer_provider: str = "fake"
@@ -51,6 +72,15 @@ class Settings(BaseSettings):
     trustchange_timestamp_header: str = "X-TrustChange-Timestamp"
     trustchange_success_statuses: list[str] = ["SUCCESS", "SUCCESSFUL", "COMPLETED"]
     trustchange_failure_statuses: list[str] = ["FAILED", "CANCELLED", "CANCELED", "EXPIRED", "REJECTED"]
+
+
+    @property
+    def admin_email_set(self) -> set[str]:
+        return {e.strip().lower() for e in self.admin_emails.split(",") if e.strip()}
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment.lower() in ("production", "prod")
 
 
 @lru_cache

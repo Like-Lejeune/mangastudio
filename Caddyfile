@@ -1,7 +1,22 @@
 # Certificats HTTPS obtenus et renouvelés automatiquement pour les deux domaines.
 
+# En-têtes de sécurité communs aux deux domaines.
+(securite) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+}
+
 # Le front : fichiers statiques ; toute adresse inconnue renvoie index.html (application à page unique).
 {$APP_DOMAIN} {
+	import securite
+	# Le site ne charge que ses propres fichiers et parle seulement à l'API ; il ne peut pas être affiché dans un cadre.
+	header Content-Security-Policy "default-src 'self'; img-src 'self' data: blob: https://{$API_DOMAIN}; connect-src 'self' https://{$API_DOMAIN}; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+	header X-Frame-Options "DENY"
 	encode gzip
 	root * /srv/app
 	try_files {path} /index.html
@@ -12,6 +27,7 @@
 
 # L'API.
 {$API_DOMAIN} {
+	import securite
 	encode gzip
 	request_body {
 		max_size 8MB

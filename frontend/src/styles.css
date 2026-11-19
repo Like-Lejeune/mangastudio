@@ -94,3 +94,50 @@
   background-image: radial-gradient(var(--encre) 24%, transparent 26%);
   background-size: 12px 12px;
 }
+
+/* ───────────── Page d'accueil : le dessin à l'encre ─────────────
+   Chaque trait porte pathLength="1" : il se trace de 1 à 0. Les animations ne démarrent
+   que sous un parent .anime (en-tête : tout de suite ; sections : à l'arrivée à l'écran). */
+@keyframes tracer { to { stroke-dashoffset: 0; } }
+@keyframes encrer { to { opacity: 1; } }
+@keyframes bulle-pop {
+  0% { opacity: 0; transform: scale(0.6) rotate(-4deg); }
+  70% { opacity: 1; transform: scale(1.06) rotate(1deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+@keyframes vibrer {
+  0%, 100% { transform: rotate(-6deg) scale(1); }
+  50% { transform: rotate(-2deg) scale(1.05); }
+}
+@keyframes defiler { to { transform: translateX(-50%); } }
+
+.trait { stroke-dasharray: 1; stroke-dashoffset: 1; }
+.aplat { opacity: 0; }
+.pop, .vibre { opacity: 0; transform-box: fill-box; transform-origin: center; }
+.anime .trait { animation: tracer var(--t, 0.8s) cubic-bezier(0.6, 0, 0.3, 1) var(--d, 0s) forwards; }
+.anime .aplat { animation: encrer 0.5s ease var(--d, 0s) forwards; }
+.anime .pop { animation: bulle-pop 0.5s cubic-bezier(0.3, 1.4, 0.5, 1) var(--d, 0s) forwards; }
+.anime .vibre { animation: bulle-pop 0.5s cubic-bezier(0.3, 1.4, 0.5, 1) var(--d, 0s) forwards, vibrer 1.6s ease-in-out calc(var(--d, 0s) + 0.6s) infinite; }
+
+/* Apparition au défilement */
+.revele { opacity: 0; transform: translateY(24px); transition: opacity 0.6s ease, transform 0.6s ease; transition-delay: var(--d, 0s); }
+.revele.anime { opacity: 1; transform: none; }
+
+/* Bandeau des partenaires */
+.defilement { mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); }
+.defilement-piste { animation: defiler var(--duree, 30s) linear infinite; }
+.defilement:hover .defilement-piste,
+.defilement:focus-within .defilement-piste { animation-play-state: paused; }
+
+/* Lignes de vitesse (fond des appels à l'action) */
+@utility vitesse {
+  background-image: repeating-conic-gradient(from 0deg at 50% 50%, rgb(255 255 255 / 0.13) 0deg 2deg, transparent 2deg 9deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trait { stroke-dashoffset: 0; }
+  .aplat, .pop, .revele { opacity: 1; transform: none; }
+  .anime .trait, .anime .aplat, .anime .pop, .anime .vibre, .defilement-piste { animation: none; }
+  .revele { transition: none; }
+  .defilement { overflow-x: auto; }
+}

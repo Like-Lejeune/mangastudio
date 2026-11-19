@@ -57,14 +57,14 @@ if (-not $SansFront) {
     Etape "Frontend : dépendances"
     Set-Location $front
     if (-not (Test-Path ".env.local")) { Set-Content -Path ".env.local" -Value "VITE_API_URL=http://localhost:8000" -Encoding ascii }
-    & npm install --no-audit --no-fund
+    & npm.cmd install --no-audit --no-fund
     if ($LASTEXITCODE -ne 0) { Echec "npm install a échoué (voir ci-dessus)." }
 }
 
 # --- 4. Lancement -------------------------------------------------------------
 Etape "Lancement"
 if (PortOccupe 8000) { Echec "Le port 8000 est déjà utilisé : une API tourne sans doute encore. Fermez sa fenêtre puis relancez." }
-Start-Process powershell -WorkingDirectory $back -ArgumentList "-NoExit", "-Command", "`$host.UI.RawUI.WindowTitle = 'MangaStudio - API'; & '$py' -m uvicorn app.main:app --reload --port 8000"
+Start-Process powershell -WorkingDirectory $back -ArgumentList "-NoExit", "-ExecutionPolicy", "Bypass", "-Command", "`$host.UI.RawUI.WindowTitle = 'MangaStudio - API'; & '$py' -m uvicorn app.main:app --reload --port 8000"
 
 $pret = $false
 foreach ($i in 1..40) {
@@ -76,10 +76,16 @@ Write-Host "API prête : http://localhost:8000  (documentation : http://localhos
 
 if (-not $SansFront) {
     if (PortOccupe 5173) { Echec "Le port 5173 est déjà utilisé : un front tourne sans doute encore. Fermez sa fenêtre puis relancez." }
-    Start-Process powershell -WorkingDirectory $front -ArgumentList "-NoExit", "-Command", "`$host.UI.RawUI.WindowTitle = 'MangaStudio - Front'; npm run dev"
-    Start-Sleep -Seconds 4
+    # npm.cmd et non npm : dans une nouvelle fenêtre, PowerShell bloque npm.ps1 si les scripts sont interdits.
+    Start-Process powershell -WorkingDirectory $front -ArgumentList "-NoExit", "-ExecutionPolicy", "Bypass", "-Command", "`$host.UI.RawUI.WindowTitle = 'MangaStudio - Front'; npm.cmd run dev"
+    $frontPret = $false
+    foreach ($i in 1..40) {
+        Start-Sleep -Milliseconds 750
+        try { if ((Invoke-WebRequest "http://localhost:5173" -UseBasicParsing -TimeoutSec 2).StatusCode -eq 200) { $frontPret = $true; break } } catch { }
+    }
+    if (-not $frontPret) { Echec "Le front n'a pas démarré : lisez le message d'erreur dans la fenêtre 'MangaStudio - Front'." }
     Start-Process "http://localhost:5173"
-    Write-Host "Front : http://localhost:5173" -ForegroundColor Green
+    Write-Host "Front prêt : http://localhost:5173" -ForegroundColor Green
 }
 
 Write-Host ""

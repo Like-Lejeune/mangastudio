@@ -15,7 +15,16 @@ from sqlalchemy import func, select
 from app import usage
 from app.config import get_settings
 from app.db import SessionLocal, init_db
-from app.models import Character, Episode, EpisodeCharacter, Page, Series, UsageEvent, User, new_id
+from app.models import (
+    Character,
+    Episode,
+    EpisodeCharacter,
+    Page,
+    Series,
+    UsageEvent,
+    User,
+    new_id,
+)
 from app.pipeline.runner import remaining_images, run_episode
 
 PREMISE = "Quatre amis ratent le dernier bus à Yaoundé. Après minuit, la ville change : les rues se déplacent et un bus sans chauffeur les suit."

@@ -51,6 +51,8 @@ async def current_user(
     user = await session.get(User, payload["sub"])
     if not user:
         raise HTTPException(401, "Compte introuvable.")
+    if not user.is_active:
+        raise HTTPException(403, {"code": "account_suspended", "message": "Ce compte est suspendu. Contactez le support."})
     return user
 
 

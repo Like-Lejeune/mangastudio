@@ -2,7 +2,17 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    true,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -23,6 +33,8 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(String(60))
     password_hash: Mapped[str] = mapped_column(String(255))
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Un compte suspendu ne peut plus se connecter ni appeler l'API ; ses données sont gardées.
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
@@ -202,3 +214,16 @@ class ModerationEvent(Base):
     rule: Mapped[str] = mapped_column(String(120))
     excerpt: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class AdminAction(Base):
+    """Journal des actions d'administration : qui a fait quoi, sur quoi, quand. Jamais modifié ni effacé."""
+    __tablename__ = "admin_actions"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    admin_id: Mapped[str] = mapped_column(String(32), index=True)
+    admin_email: Mapped[str] = mapped_column(String(255))
+    action: Mapped[str] = mapped_column(String(40))        # credits | plan | suspend | reactivate | role | term | scene_rule
+    target_type: Mapped[str] = mapped_column(String(20))   # user | term | scene_rule
+    target_id: Mapped[str] = mapped_column(String(64), index=True)
+    detail: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)

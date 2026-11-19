@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port 5173",
+    "dev": "vite --port 5173 --host 127.0.0.1",
     "build": "vite build && tsc --noEmit",
-    "preview": "vite preview --port 5173"
+    "preview": "vite preview --port 5173 --host 127.0.0.1"
   },
   "dependencies": {
     "@fontsource/bangers": "^5.1.0",

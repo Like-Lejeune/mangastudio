@@ -5,7 +5,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import moderation
 from app.db import get_session
-from app.models import BlockedTerm, ModerationEvent, SceneRule, UsageEvent
+from app.models import (
+    AdminAction,
+    BlockedTerm,
+    ModerationEvent,
+    SceneRule,
+    UsageEvent,
+    User,
+)
 from app.schemas import SceneRuleIn, TermIn
 from app.security import admin_user
 
@@ -19,7 +26,7 @@ async def list_terms(session: AsyncSession = Depends(get_session)):
 
 
 @router.post("/terms", status_code=201)
-async def add_term(body: TermIn, session: AsyncSession = Depends(get_session)):
+async def add_term(body: TermIn, admin: User = Depends(admin_user), session: AsyncSession = Depends(get_session)):
     """Le terme est stocké normalisé : « S3xe », « sèxe » et « sexe » donnent la même entrée."""
     term = moderation.normalize(body.term)
     if len(term) < 2:
@@ -30,12 +37,18 @@ async def add_term(body: TermIn, session: AsyncSession = Depends(get_session)):
     else:
         existing = BlockedTerm(term=term, action=body.action)
         session.add(existing)
+    session.add(AdminAction(admin_id=admin.id, admin_email=admin.email, action="term", target_type="term", target_id=term,
+                            detail=f"« {term} » : {'bloqué' if body.action == 'block' else 'signalé'}"))
     await session.commit()
     return {"id": existing.id, "term": existing.term, "action": existing.action}
 
 
 @router.delete("/terms/{term_id}", status_code=204)
-async def delete_term(term_id: str, session: AsyncSession = Depends(get_session)):
+async def delete_term(term_id: str, admin: User = Depends(admin_user), session: AsyncSession = Depends(get_session)):
+    term = await session.get(BlockedTerm, term_id)
+    if term:
+        session.add(AdminAction(admin_id=admin.id, admin_email=admin.email, action="term", target_type="term", target_id=term.term,
+                                detail=f"« {term.term} » retiré"))
     await session.execute(delete(BlockedTerm).where(BlockedTerm.id == term_id))
     await session.commit()
 
@@ -50,28 +63,35 @@ async def list_rules(session: AsyncSession = Depends(get_session)):
 
 
 @router.post("/scene-rules", status_code=201)
-async def add_rule(body: SceneRuleIn, session: AsyncSession = Depends(get_session)):
+async def add_rule(body: SceneRuleIn, admin: User = Depends(admin_user), session: AsyncSession = Depends(get_session)):
     rule = (await session.execute(select(SceneRule).where(SceneRule.label == body.label))).scalar_one_or_none()
     if rule:
         rule.description, rule.active = body.description, body.active
     else:
         rule = SceneRule(**body.model_dump())
         session.add(rule)
+    session.add(AdminAction(admin_id=admin.id, admin_email=admin.email, action="scene_rule", target_type="scene_rule", target_id=body.label,
+                            detail=f"{body.label} : {'active' if body.active else 'désactivée'} — {body.description[:200]}"))
     await session.commit()
     return {"id": rule.id, "label": rule.label, "description": rule.description, "active": rule.active}
 
 
 @router.delete("/scene-rules/{rule_id}", status_code=204)
-async def delete_rule(rule_id: str, session: AsyncSession = Depends(get_session)):
+async def delete_rule(rule_id: str, admin: User = Depends(admin_user), session: AsyncSession = Depends(get_session)):
+    rule = await session.get(SceneRule, rule_id)
+    if rule:
+        session.add(AdminAction(admin_id=admin.id, admin_email=admin.email, action="scene_rule", target_type="scene_rule",
+                                target_id=rule.label, detail=f"{rule.label} supprimée"))
     await session.execute(delete(SceneRule).where(SceneRule.id == rule_id))
     await session.commit()
 
 
 @router.get("/moderation-events")
 async def events(limit: int = 100, session: AsyncSession = Depends(get_session)):
-    rows = (await session.execute(select(ModerationEvent).order_by(ModerationEvent.created_at.desc()).limit(min(limit, 500)))).scalars()
-    return [{"id": e.id, "user_id": e.user_id, "episode_id": e.episode_id, "checkpoint": e.checkpoint, "action": e.action,
-             "rule": e.rule, "excerpt": e.excerpt, "created_at": e.created_at.isoformat()} for e in rows]
+    rows = (await session.execute(select(ModerationEvent, User.email).join(User, ModerationEvent.user_id == User.id, isouter=True)
+                                  .order_by(ModerationEvent.created_at.desc()).limit(min(limit, 500)))).all()
+    return [{"id": e.id, "user_id": e.user_id, "user_email": email, "episode_id": e.episode_id, "checkpoint": e.checkpoint,
+             "action": e.action, "rule": e.rule, "excerpt": e.excerpt, "created_at": e.created_at.isoformat()} for e, email in rows]
 
 
 @router.get("/costs")

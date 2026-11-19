@@ -22,6 +22,7 @@ export function TopBar() {
             <nav className="flex items-center gap-1" aria-label="Navigation principale">
               <Link to="/" className={navCls} activeProps={{ className: "text-vermillon" }} activeOptions={{ exact: true }}>Mes séries</Link>
               <Link to="/abonnements" className={navCls} activeProps={{ className: "text-vermillon" }}>Abonnements</Link>
+              {me?.is_admin && <Link to="/admin" className={navCls} activeProps={{ className: "text-vermillon" }}>Administration</Link>}
             </nav>
             <div className="ml-auto flex items-center gap-2">
               {me && <Pill>Plan {me.plan.name}</Pill>}

@@ -11,10 +11,19 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AbonnementsRouteImport } from './routes/abonnements'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as ConnexionRouteImport } from './routes/connexion'
 import { Route as InscriptionRouteImport } from './routes/inscription'
+import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as AdminJournalRouteImport } from './routes/admin/journal'
+import { Route as AdminModerationRouteImport } from './routes/admin/moderation'
+import { Route as AdminPaiementsRouteImport } from './routes/admin/paiements'
 import { Route as EpisodesIdRouteImport } from './routes/episodes.$id'
 import { Route as SeriesIdRouteImport } from './routes/series.$id'
+import { Route as AdminEpisodesIndexRouteImport } from './routes/admin/episodes.index'
+import { Route as AdminEpisodesIdRouteImport } from './routes/admin/episodes.$id'
+import { Route as AdminUtilisateursIndexRouteImport } from './routes/admin/utilisateurs.index'
+import { Route as AdminUtilisateursIdRouteImport } from './routes/admin/utilisateurs.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -24,6 +33,11 @@ const IndexRoute = IndexRouteImport.update({
 const AbonnementsRoute = AbonnementsRouteImport.update({
   id: '/abonnements',
   path: '/abonnements',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConnexionRoute = ConnexionRouteImport.update({
@@ -36,6 +50,26 @@ const InscriptionRoute = InscriptionRouteImport.update({
   path: '/inscription',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminJournalRoute = AdminJournalRouteImport.update({
+  id: '/journal',
+  path: '/journal',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminModerationRoute = AdminModerationRouteImport.update({
+  id: '/moderation',
+  path: '/moderation',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminPaiementsRoute = AdminPaiementsRouteImport.update({
+  id: '/paiements',
+  path: '/paiements',
+  getParentRoute: () => AdminRoute,
+} as any)
 const EpisodesIdRoute = EpisodesIdRouteImport.update({
   id: '/episodes/$id',
   path: '/episodes/$id',
@@ -46,62 +80,135 @@ const SeriesIdRoute = SeriesIdRouteImport.update({
   path: '/series/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminEpisodesIndexRoute = AdminEpisodesIndexRouteImport.update({
+  id: '/episodes/',
+  path: '/episodes/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminEpisodesIdRoute = AdminEpisodesIdRouteImport.update({
+  id: '/episodes/$id',
+  path: '/episodes/$id',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminUtilisateursIndexRoute = AdminUtilisateursIndexRouteImport.update({
+  id: '/utilisateurs/',
+  path: '/utilisateurs/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminUtilisateursIdRoute = AdminUtilisateursIdRouteImport.update({
+  id: '/utilisateurs/$id',
+  path: '/utilisateurs/$id',
+  getParentRoute: () => AdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/abonnements': typeof AbonnementsRoute
+  '/admin': typeof AdminRouteWithChildren
   '/connexion': typeof ConnexionRoute
   '/inscription': typeof InscriptionRoute
+  '/admin/journal': typeof AdminJournalRoute
+  '/admin/moderation': typeof AdminModerationRoute
+  '/admin/paiements': typeof AdminPaiementsRoute
   '/episodes/$id': typeof EpisodesIdRoute
   '/series/$id': typeof SeriesIdRoute
+  '/admin/': typeof AdminIndexRoute
+  '/admin/episodes/$id': typeof AdminEpisodesIdRoute
+  '/admin/utilisateurs/$id': typeof AdminUtilisateursIdRoute
+  '/admin/episodes/': typeof AdminEpisodesIndexRoute
+  '/admin/utilisateurs/': typeof AdminUtilisateursIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/abonnements': typeof AbonnementsRoute
   '/connexion': typeof ConnexionRoute
   '/inscription': typeof InscriptionRoute
+  '/admin/journal': typeof AdminJournalRoute
+  '/admin/moderation': typeof AdminModerationRoute
+  '/admin/paiements': typeof AdminPaiementsRoute
   '/episodes/$id': typeof EpisodesIdRoute
   '/series/$id': typeof SeriesIdRoute
+  '/admin': typeof AdminIndexRoute
+  '/admin/episodes/$id': typeof AdminEpisodesIdRoute
+  '/admin/utilisateurs/$id': typeof AdminUtilisateursIdRoute
+  '/admin/episodes': typeof AdminEpisodesIndexRoute
+  '/admin/utilisateurs': typeof AdminUtilisateursIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/abonnements': typeof AbonnementsRoute
+  '/admin': typeof AdminRouteWithChildren
   '/connexion': typeof ConnexionRoute
   '/inscription': typeof InscriptionRoute
+  '/admin/journal': typeof AdminJournalRoute
+  '/admin/moderation': typeof AdminModerationRoute
+  '/admin/paiements': typeof AdminPaiementsRoute
   '/episodes/$id': typeof EpisodesIdRoute
   '/series/$id': typeof SeriesIdRoute
+  '/admin/': typeof AdminIndexRoute
+  '/admin/episodes/$id': typeof AdminEpisodesIdRoute
+  '/admin/utilisateurs/$id': typeof AdminUtilisateursIdRoute
+  '/admin/episodes/': typeof AdminEpisodesIndexRoute
+  '/admin/utilisateurs/': typeof AdminUtilisateursIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/abonnements'
+    | '/admin'
     | '/connexion'
     | '/inscription'
+    | '/admin/journal'
+    | '/admin/moderation'
+    | '/admin/paiements'
     | '/episodes/$id'
     | '/series/$id'
+    | '/admin/'
+    | '/admin/episodes/$id'
+    | '/admin/utilisateurs/$id'
+    | '/admin/episodes/'
+    | '/admin/utilisateurs/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/abonnements'
     | '/connexion'
     | '/inscription'
+    | '/admin/journal'
+    | '/admin/moderation'
+    | '/admin/paiements'
     | '/episodes/$id'
     | '/series/$id'
+    | '/admin'
+    | '/admin/episodes/$id'
+    | '/admin/utilisateurs/$id'
+    | '/admin/episodes'
+    | '/admin/utilisateurs'
   id:
     | '__root__'
     | '/'
     | '/abonnements'
+    | '/admin'
     | '/connexion'
     | '/inscription'
+    | '/admin/journal'
+    | '/admin/moderation'
+    | '/admin/paiements'
     | '/episodes/$id'
     | '/series/$id'
+    | '/admin/'
+    | '/admin/episodes/$id'
+    | '/admin/utilisateurs/$id'
+    | '/admin/episodes/'
+    | '/admin/utilisateurs/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AbonnementsRoute: typeof AbonnementsRoute
+  AdminRoute: typeof AdminRouteWithChildren
   ConnexionRoute: typeof ConnexionRoute
   InscriptionRoute: typeof InscriptionRoute
   EpisodesIdRoute: typeof EpisodesIdRoute
@@ -124,6 +231,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AbonnementsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/connexion': {
       id: '/connexion'
       path: '/connexion'
@@ -137,6 +251,34 @@ declare module '@tanstack/react-router' {
       fullPath: '/inscription'
       preLoaderRoute: typeof InscriptionRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/journal': {
+      id: '/admin/journal'
+      path: '/journal'
+      fullPath: '/admin/journal'
+      preLoaderRoute: typeof AdminJournalRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/moderation': {
+      id: '/admin/moderation'
+      path: '/moderation'
+      fullPath: '/admin/moderation'
+      preLoaderRoute: typeof AdminModerationRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/paiements': {
+      id: '/admin/paiements'
+      path: '/paiements'
+      fullPath: '/admin/paiements'
+      preLoaderRoute: typeof AdminPaiementsRouteImport
+      parentRoute: typeof AdminRoute
     }
     '/episodes/$id': {
       id: '/episodes/$id'
@@ -152,12 +294,65 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SeriesIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/episodes/': {
+      id: '/admin/episodes/'
+      path: '/episodes'
+      fullPath: '/admin/episodes/'
+      preLoaderRoute: typeof AdminEpisodesIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/episodes/$id': {
+      id: '/admin/episodes/$id'
+      path: '/episodes/$id'
+      fullPath: '/admin/episodes/$id'
+      preLoaderRoute: typeof AdminEpisodesIdRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/utilisateurs/': {
+      id: '/admin/utilisateurs/'
+      path: '/utilisateurs'
+      fullPath: '/admin/utilisateurs/'
+      preLoaderRoute: typeof AdminUtilisateursIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/utilisateurs/$id': {
+      id: '/admin/utilisateurs/$id'
+      path: '/utilisateurs/$id'
+      fullPath: '/admin/utilisateurs/$id'
+      preLoaderRoute: typeof AdminUtilisateursIdRouteImport
+      parentRoute: typeof AdminRoute
+    }
   }
 }
+
+interface AdminRouteChildren {
+  AdminJournalRoute: typeof AdminJournalRoute
+  AdminModerationRoute: typeof AdminModerationRoute
+  AdminPaiementsRoute: typeof AdminPaiementsRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+  AdminEpisodesIdRoute: typeof AdminEpisodesIdRoute
+  AdminUtilisateursIdRoute: typeof AdminUtilisateursIdRoute
+  AdminEpisodesIndexRoute: typeof AdminEpisodesIndexRoute
+  AdminUtilisateursIndexRoute: typeof AdminUtilisateursIndexRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminJournalRoute: AdminJournalRoute,
+  AdminModerationRoute: AdminModerationRoute,
+  AdminPaiementsRoute: AdminPaiementsRoute,
+  AdminIndexRoute: AdminIndexRoute,
+  AdminEpisodesIdRoute: AdminEpisodesIdRoute,
+  AdminUtilisateursIdRoute: AdminUtilisateursIdRoute,
+  AdminEpisodesIndexRoute: AdminEpisodesIndexRoute,
+  AdminUtilisateursIndexRoute: AdminUtilisateursIndexRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AbonnementsRoute: AbonnementsRoute,
+  AdminRoute: AdminRouteWithChildren,
   ConnexionRoute: ConnexionRoute,
   InscriptionRoute: InscriptionRoute,
   EpisodesIdRoute: EpisodesIdRoute,
