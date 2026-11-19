@@ -12,7 +12,8 @@ ATTENDUS = {
     ".gitattributes": "83d39627ed864dda",
     ".gitignore": "46ff76ba1988f067",
     "Caddyfile": "b494d7f8c9816d78",
-    "DEPLOIEMENT.md": "c61675a3d8bc9464",
+    "Caddyfile.proxy": "f7e27076c4012f8e",
+    "DEPLOIEMENT.md": "badef5a070a41293",
     "README.md": "d470eb36f41a1c43",
     "TEST_LOCAL.md": "4a2d2d87672a1e86",
     "backend/.dockerignore": "1ee897f5df60df4d",
@@ -78,9 +79,9 @@ ATTENDUS = {
     "deploy.bat": "88952071cbf06845",
     "deploy.ps1": "6767010284b6da5d",
     "deploy.sh": "8ab91870f5c4f0c0",
-    "docker-compose.yml": "78ef9d6bd7623474",
+    "docker-compose.yml": "f6490d9c6fc928a1",
     "frontend/.env.example": "eaa8503379c11ade",
-    "frontend/Dockerfile": "ecdb3d5cf34d24f0",
+    "frontend/Dockerfile": "c9d09ff88c361dda",
     "frontend/index.html": "2d760d9159cc40df",
     "frontend/package.json": "5a62729040c19a34",
     "frontend/public/brand/logo-inverse.svg": "a2ee887c47d15410",
@@ -118,7 +119,8 @@ ATTENDUS = {
     "frontend/src/styles.css": "6b5e9e7a6b094abc",
     "frontend/tsconfig.json": "357e4358413314b2",
     "frontend/vite.config.ts": "08ce304175bfa22a",
-    "vps/deployer.sh": "2b7f9c7ac755236d",
+    "vps/deployer.sh": "d0dcb4b81a61ccc7",
+    "vps/nginx-mangastudio.conf": "ed5ad50dc85dc4f5",
     "vps/sauvegarde.sh": "9c2964bd8c6f0379"
 }
 VIDES = [

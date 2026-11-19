@@ -80,13 +80,19 @@ Pour tester le classeur de scènes interdites avec le vrai modèle (20 cas inter
 docker compose exec api python -m scripts.test_scenes
 ```
 
-## Port 80 déjà utilisé par un autre site
+## Ports 80 et 443 déjà utilisés par un autre serveur web
 
-Si un autre serveur web (nginx, apache) tient déjà le port 80 du VPS, `vps/deployer.sh` le lui laisse. Il ajoute `CADDY_HTTP_PORT=127.0.0.1:8081` dans `.env.production`, et Caddy garde le port 443 : les certificats sont validés par le 443 seul. Le site reste à `https://…`, sans numéro de port.
+`vps/deployer.sh` s'adapte à ce qu'il trouve sur le VPS :
 
-Il reste une chose à faire une fois : renvoyer `http://` vers `https://` pour les deux sous-domaines. Sinon, un visiteur qui tape l'adresse sans le « s » arrive sur l'autre site.
+| Sur le VPS | Ce que fait le script |
+|---|---|
+| 80 et 443 libres | Caddy tient les deux ports et fait le HTTPS lui-même. |
+| 80 pris, 443 libre | Caddy garde le 443 et valide ses certificats par là. Il faut une redirection http → https côté serveur existant (voir ci-dessous). |
+| 80 et 443 pris par nginx | Caddy écoute **en local seulement**, sur le premier port libre à partir de 127.0.0.1:8081. Le script ajoute ensuite à nginx un site pour les deux sous-domaines (`vps/nginx-mangastudio.conf` → `/etc/nginx/sites-available/mangastudio`), vérifie la configuration (`nginx -t`), recharge nginx, puis obtient les certificats avec certbot, redirection http → https comprise. Les autres sites de nginx ne sont pas touchés. Si `nginx -t` échoue, le fichier ajouté est retiré aussitôt. |
 
-Avec **nginx** :
+Dans le troisième cas, les adresses restent `https://mangastudio.psikalab.space` et `https://apimangastudio.psikalab.space`, sans numéro de port. Le choix est noté dans `.env.production` (`CADDY_CONFIG`, `CADDY_HTTP_PORT`, `CADDY_HTTPS_PORT`) et réutilisé aux déploiements suivants.
+
+Redirection http → https dans le deuxième cas, avec nginx :
 
 ```bash
 sudo tee /etc/nginx/sites-available/mangastudio-redirection >/dev/null <<'NGINX'
@@ -99,12 +105,7 @@ server {
 NGINX
 sudo ln -sf /etc/nginx/sites-available/mangastudio-redirection /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
-curl -sI http://mangastudio.psikalab.space | head -3      # doit répondre 301 vers https://
 ```
-
-Avec **apache** : un `<VirtualHost *:80>` avec `ServerName mangastudio.psikalab.space`, `ServerAlias apimangastudio.psikalab.space` et `Redirect permanent / https://mangastudio.psikalab.space/`. Pour l'API, la même chose avec son domaine.
-
-Attention : le port 443 doit rester à MangaStudio. Ne lancez pas `certbot --nginx` pour un autre site de ce VPS : nginx prendrait le 443 et Caddy ne pourrait plus démarrer.
 
 ## Modifier la base de données
 

@@ -69,27 +69,42 @@ info "4. Ports 80 et 443"
 caddy_actif=false
 "${COMPOSE[@]}" ps caddy 2>/dev/null | grep -q -E "Up|running" && caddy_actif=true
 pris() { ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$1\$"; }
-if pris 443 && ! $caddy_actif; then
-  ss -ltnp 2>/dev/null | grep ":443 " || true
-  stop "Le port 443 (HTTPS) est déjà pris par un autre programme : MangaStudio en a besoin. Dites-moi lequel (sudo ss -ltnp 'sport = :443')."
-fi
+regler() {   # regler VAR valeur : écrit ou remplace la ligne dans .env.production
+  if grep -qE "^$1=" "$ENV_FILE"; then sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"; else printf '%s=%s\n' "$1" "$2" >> "$ENV_FILE"; fi
+}
+DERRIERE_NGINX=false
 PORT80_PARTAGE=false
-if [[ -n "$(val CADDY_HTTP_PORT)" ]]; then
+if [[ "$(val CADDY_CONFIG)" == *Caddyfile.proxy ]]; then
+  DERRIERE_NGINX=true
+elif pris 443 && ! $caddy_actif; then
+  # Un autre serveur web tient le HTTPS du VPS : il relaiera nos deux sous-domaines vers un port local libre.
+  port=""
+  for p in $(seq 8081 8099); do pris "$p" || { port=$p; break; }; done
+  [[ -n $port ]] || stop "Aucun port libre entre 8081 et 8099 pour MangaStudio."
+  printf '\n# Les ports 80/443 du VPS appartiennent à nginx : Caddy écoute en local, nginx lui relaie les visiteurs.\n' >> "$ENV_FILE"
+  regler CADDY_CONFIG /etc/caddy/Caddyfile.proxy
+  regler CADDY_HTTP_PORT "127.0.0.1:$port"
+  regler CADDY_HTTPS_PORT "127.0.0.1:$((port + 1000))"
+  DERRIERE_NGINX=true
+fi
+if $DERRIERE_NGINX; then
+  PORT_LOCAL=$(val CADDY_HTTP_PORT); PORT_LOCAL=${PORT_LOCAL##*:}
+  ok "ports 80/443 laissés au serveur web du VPS ; MangaStudio écoute sur 127.0.0.1:$PORT_LOCAL"
+elif [[ -n "$(val CADDY_HTTP_PORT)" ]]; then
   PORT80_PARTAGE=true
-  ok "port 80 laissé à l'autre serveur web (CADDY_HTTP_PORT=$(val CADDY_HTTP_PORT))"
+  ok "port 80 laissé à l'autre serveur web, Caddy garde le 443"
 elif pris 80 && ! $caddy_actif; then
-  # Un autre site occupe le port 80 : on le lui laisse. Caddy garde le 443 et valide ses certificats par là.
-  printf '\n# Port 80 du VPS occupé par un autre serveur web : Caddy n'"'"'y écoute qu'"'"'en local.\nCADDY_HTTP_PORT=127.0.0.1:8081\n' >> "$ENV_FILE"
+  printf '\n# Port 80 du VPS occupé par un autre serveur web : Caddy n'"'"'y écoute qu'"'"'en local.\n' >> "$ENV_FILE"
+  regler CADDY_HTTP_PORT 127.0.0.1:8081
   PORT80_PARTAGE=true
   ok "port 80 déjà utilisé par un autre serveur web : on le lui laisse, MangaStudio passe par le 443"
 else
-  ok "port 80 libre ou déjà tenu par Caddy"
+  ok "ports 80 et 443 libres ou déjà tenus par Caddy"
 fi
-if command -v ufw >/dev/null 2>&1 && sudo -n ufw status 2>/dev/null | grep -q "Status: active"; then
+if ! $DERRIERE_NGINX && command -v ufw >/dev/null 2>&1 && sudo -n ufw status 2>/dev/null | grep -q "Status: active"; then
   sudo ufw allow 443/tcp >/dev/null
   $PORT80_PARTAGE || sudo ufw allow 80/tcp >/dev/null
 fi
-ok "port 443 libre ou déjà tenu par Caddy"
 
 info "5. Secrets hors de git"
 if git rev-parse --git-dir >/dev/null 2>&1; then
@@ -114,13 +129,49 @@ info "8. Contrôle de sécurité"
   python -m scripts.controle_securite --racine /repo --env /repo/"$ENV_FILE" \
   || stop "Le contrôle de sécurité a trouvé un point à corriger (voir ci-dessus)."
 
-info "9. Réponse en HTTPS (certificats obtenus au premier démarrage)"
-for i in $(seq 1 60); do
-  if curl -fsS --max-time 5 "https://$API_DOMAIN/health" >/dev/null 2>&1; then break; fi
-  [[ $i -eq 60 ]] && { "${COMPOSE[@]}" logs --tail 40 api caddy; stop "https://$API_DOMAIN/health ne répond pas après 3 minutes (journaux ci-dessus)."; }
-  sleep 3
-done
-ok "https://$API_DOMAIN/health → $(curl -fsS "https://$API_DOMAIN/health")"
+if $DERRIERE_NGINX; then
+  info "9. Relais nginx et certificats HTTPS"
+  for i in $(seq 1 40); do
+    curl -fsS --max-time 5 -H "Host: $API_DOMAIN" "http://127.0.0.1:$PORT_LOCAL/health" >/dev/null 2>&1 && break
+    [[ $i -eq 40 ]] && { "${COMPOSE[@]}" logs --tail 40 api caddy; stop "MangaStudio ne répond pas sur 127.0.0.1:$PORT_LOCAL (journaux ci-dessus)."; }
+    sleep 3
+  done
+  ok "MangaStudio répond en local sur 127.0.0.1:$PORT_LOCAL"
+  systemctl is-active --quiet nginx 2>/dev/null \
+    || stop "Le serveur web qui tient les ports 80/443 n'est pas nginx. Envoyez la sortie de : sudo ss -ltnp 'sport = :443'"
+  CONF=/etc/nginx/sites-available/mangastudio
+  sed "s/__APP_DOMAIN__/$APP_DOMAIN/g; s/__API_DOMAIN__/$API_DOMAIN/g; s/__PORT__/$PORT_LOCAL/g" vps/nginx-mangastudio.conf > /tmp/nginx-mangastudio.conf
+  if [[ ! -f $CONF ]]; then
+    echo "  Ajout du site MangaStudio à nginx (mot de passe sudo demandé)…"
+    sudo cp /tmp/nginx-mangastudio.conf "$CONF"
+    sudo ln -sf "$CONF" /etc/nginx/sites-enabled/mangastudio
+    if ! sudo nginx -t 2>/tmp/nginx-test.log; then
+      sudo rm -f /etc/nginx/sites-enabled/mangastudio "$CONF"
+      cat /tmp/nginx-test.log
+      stop "nginx refuse la configuration (ci-dessus). Rien n'a été changé pour vos autres sites."
+    fi
+    sudo systemctl reload nginx
+    ok "nginx relaie $APP_DOMAIN et $API_DOMAIN vers MangaStudio (autres sites inchangés)"
+  else
+    ok "site nginx déjà en place ($CONF)"
+  fi
+  if ! curl -fsS --max-time 8 "https://$API_DOMAIN/health" >/dev/null 2>&1; then
+    command -v certbot >/dev/null 2>&1 || sudo apt-get install -y certbot python3-certbot-nginx
+    mail=$(val ADMIN_EMAILS); mail=${mail%%,*}
+    sudo certbot --nginx -d "$APP_DOMAIN" -d "$API_DOMAIN" --redirect --non-interactive --agree-tos -m "$mail" \
+      || stop "certbot n'a pas obtenu les certificats (message ci-dessus)."
+  fi
+  curl -fsS --max-time 10 "https://$API_DOMAIN/health" >/dev/null || stop "https://$API_DOMAIN/health ne répond pas."
+  ok "https://$API_DOMAIN/health → $(curl -fsS "https://$API_DOMAIN/health")"
+else
+  info "9. Réponse en HTTPS (certificats obtenus au premier démarrage)"
+  for i in $(seq 1 60); do
+    if curl -fsS --max-time 5 "https://$API_DOMAIN/health" >/dev/null 2>&1; then break; fi
+    [[ $i -eq 60 ]] && { "${COMPOSE[@]}" logs --tail 40 api caddy; stop "https://$API_DOMAIN/health ne répond pas après 3 minutes (journaux ci-dessus)."; }
+    sleep 3
+  done
+  ok "https://$API_DOMAIN/health → $(curl -fsS "https://$API_DOMAIN/health")"
+fi
 code=$(curl -s -o /dev/null -w '%{http_code}' "https://$APP_DOMAIN/")
 [[ $code == 200 ]] || stop "https://$APP_DOMAIN répond $code"
 ok "https://$APP_DOMAIN → 200"

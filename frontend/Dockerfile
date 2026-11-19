@@ -10,5 +10,7 @@ ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build
 
 FROM caddy:2-alpine
-COPY Caddyfile /etc/caddy/Caddyfile
+COPY Caddyfile Caddyfile.proxy /etc/caddy/
 COPY --from=build /src/dist /srv/app
+# CADDY_CONFIG choisit la variante : Caddyfile (Caddy fait le HTTPS) ou Caddyfile.proxy (derrière nginx).
+CMD ["sh", "-c", "exec caddy run --config \"${CADDY_CONFIG:-/etc/caddy/Caddyfile}\" --adapter caddyfile"]
