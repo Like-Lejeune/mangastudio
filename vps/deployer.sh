@@ -66,16 +66,30 @@ for d in "$APP_DOMAIN" "$API_DOMAIN"; do
 done
 
 info "4. Ports 80 et 443"
-for p in 80 443; do
-  if ss -ltnp 2>/dev/null | grep -q ":$p " && ! "${COMPOSE[@]}" ps caddy 2>/dev/null | grep -q -E "Up|running"; then
-    ss -ltnp | grep ":$p " || true
-    stop "Le port $p est déjà pris par un autre programme (nginx, apache ?). Arrêtez-le : sudo systemctl disable --now nginx apache2"
-  fi
-done
-if command -v ufw >/dev/null 2>&1 && sudo -n ufw status 2>/dev/null | grep -q "Status: active"; then
-  sudo ufw allow 80/tcp >/dev/null; sudo ufw allow 443/tcp >/dev/null
+caddy_actif=false
+"${COMPOSE[@]}" ps caddy 2>/dev/null | grep -q -E "Up|running" && caddy_actif=true
+pris() { ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$1\$"; }
+if pris 443 && ! $caddy_actif; then
+  ss -ltnp 2>/dev/null | grep ":443 " || true
+  stop "Le port 443 (HTTPS) est déjà pris par un autre programme : MangaStudio en a besoin. Dites-moi lequel (sudo ss -ltnp 'sport = :443')."
 fi
-ok "ports libres ou déjà tenus par Caddy"
+PORT80_PARTAGE=false
+if [[ -n "$(val CADDY_HTTP_PORT)" ]]; then
+  PORT80_PARTAGE=true
+  ok "port 80 laissé à l'autre serveur web (CADDY_HTTP_PORT=$(val CADDY_HTTP_PORT))"
+elif pris 80 && ! $caddy_actif; then
+  # Un autre site occupe le port 80 : on le lui laisse. Caddy garde le 443 et valide ses certificats par là.
+  printf '\n# Port 80 du VPS occupé par un autre serveur web : Caddy n'"'"'y écoute qu'"'"'en local.\nCADDY_HTTP_PORT=127.0.0.1:8081\n' >> "$ENV_FILE"
+  PORT80_PARTAGE=true
+  ok "port 80 déjà utilisé par un autre serveur web : on le lui laisse, MangaStudio passe par le 443"
+else
+  ok "port 80 libre ou déjà tenu par Caddy"
+fi
+if command -v ufw >/dev/null 2>&1 && sudo -n ufw status 2>/dev/null | grep -q "Status: active"; then
+  sudo ufw allow 443/tcp >/dev/null
+  $PORT80_PARTAGE || sudo ufw allow 80/tcp >/dev/null
+fi
+ok "port 443 libre ou déjà tenu par Caddy"
 
 info "5. Secrets hors de git"
 if git rev-parse --git-dir >/dev/null 2>&1; then
@@ -121,5 +135,9 @@ else
   ok "programmée (crontab -l pour la voir)"
 fi
 
+if $PORT80_PARTAGE; then
+  printf '\n\033[1mÀ faire une fois :\033[0m quelqu'"'"'un qui tape http://%s (sans s) arrive sur l'"'"'autre serveur web.\n' "$APP_DOMAIN"
+  printf 'Pour le renvoyer vers https://, voir « Port 80 déjà utilisé » dans DEPLOIEMENT.md.\n'
+fi
 printf '\n\033[32mMangaStudio est en ligne : https://%s\033[0m\n' "$APP_DOMAIN"
 printf 'Journaux : docker compose logs -f api worker   ·   Test de restauration : bash vps/sauvegarde.sh --tester\n\n'
