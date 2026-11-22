@@ -40,6 +40,12 @@ class User(Base):
     verify_code_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     verify_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     verify_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Mot de passe oublié : code à 6 chiffres envoyé par e-mail.
+    reset_code_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    reset_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reset_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Augmenté à chaque changement de mot de passe : les sessions ouvertes avant sont fermées.
+    session_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 

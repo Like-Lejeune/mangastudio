@@ -14,7 +14,7 @@ from app.db import get_session
 from app.disposable import is_disposable
 from app.models import CreditLedger, User
 from app.plans import PLANS
-from app.schemas import Login, Register, VerifyIn
+from app.schemas import ForgotIn, Login, Register, ResetIn, VerifyIn
 from app.security import create_token, current_user, hash_password, verify_password
 from app.services import current_plan
 
@@ -81,7 +81,7 @@ async def register(body: Register, request: Request, session: AsyncSession = Dep
             await send_new_code(session, user)
         except HTTPException:
             pass   # le compte existe : la personne demandera un nouveau code depuis l'écran de vérification
-    return {"token": create_token(user.id), "email_verified": user.email_verified}
+    return {"token": create_token(user.id, user.session_version), "email_verified": user.email_verified}
 
 
 @router.post("/auth/verify")
@@ -138,7 +138,7 @@ async def login(body: Login, request: Request, session: AsyncSession = Depends(g
     if email in settings.admin_email_set and not user.is_admin:
         user.is_admin = True
         await session.commit()
-    return {"token": create_token(user.id)}
+    return {"token": create_token(user.id, user.session_version)}
 
 
 @router.get("/me")
@@ -152,3 +152,59 @@ async def me(user: User = Depends(current_user), session: AsyncSession = Depends
                  "color": plan.color, "redraw": plan.redraw},
         "subscription": {"status": sub.status, "provider": sub.provider, "period_end": sub.period_end.isoformat()} if sub else None,
     }
+
+
+# ---------- Mot de passe oublié ----------
+
+@router.post("/auth/forgot-password")
+async def forgot_password(body: ForgotIn, request: Request, session: AsyncSession = Depends(get_session)):
+    """Envoie un code si un compte existe. La réponse est toujours la même, pour ne pas révéler
+    quelles adresses sont inscrites."""
+    email = body.email.strip().lower()
+    ip = ratelimit.client_ip(request)
+    ratelimit.check(f"reset-ip:{ip}", 10, 3600)
+    ratelimit.check(f"reset-minute:{email}", 1, 60)
+    ratelimit.check(f"reset-heure:{email}", 5, 3600)
+    for key in (f"reset-ip:{ip}", f"reset-minute:{email}", f"reset-heure:{email}"):
+        ratelimit.add(key)
+    user = (await session.execute(select(User).where(User.email == email))).scalar_one_or_none()
+    if user and user.is_active:
+        code = f"{secrets.randbelow(10**6):06d}"
+        user.reset_code_hash = _hash("reset:" + code)
+        user.reset_expires_at = datetime.now(timezone.utc) + timedelta(minutes=CODE_MINUTES)
+        user.reset_attempts = 0
+        await session.commit()
+        try:
+            await mailer.send_reset_code(user.email, user.display_name, code, CODE_MINUTES)
+        except mailer.MailError:
+            raise HTTPException(502, {"code": "mail_failed", "message": "L'e-mail n'a pas pu partir. Réessayez dans un instant."}) from None
+    return {"sent": True}
+
+
+@router.post("/auth/reset-password")
+async def reset_password(body: ResetIn, session: AsyncSession = Depends(get_session)):
+    """Nouveau mot de passe avec le code reçu. Ferme toutes les autres sessions et connecte la personne."""
+    email = body.email.strip().lower()
+    user = (await session.execute(select(User).where(User.email == email))).scalar_one_or_none()
+    expired = not user or not user.reset_code_hash or (_aware(user.reset_expires_at) or datetime.min.replace(tzinfo=timezone.utc)) < datetime.now(timezone.utc)
+    if expired:
+        raise HTTPException(410, {"code": "code_expired", "message": "Ce code n'est plus valable. Demandez-en un nouveau."})
+    if user.reset_attempts >= CODE_MAX_ATTEMPTS:
+        raise HTTPException(429, {"code": "too_many_attempts", "message": "Trop d'essais. Demandez un nouveau code."})
+    if not hmac.compare_digest(_hash("reset:" + body.code.strip()), user.reset_code_hash):
+        user.reset_attempts += 1
+        await session.commit()
+        left = CODE_MAX_ATTEMPTS - user.reset_attempts
+        raise HTTPException(422, {"code": "wrong_code", "message": f"Code incorrect. Encore {left} essai{'s' if left > 1 else ''}." if left else "Code incorrect. Demandez un nouveau code."})
+    if not user.is_active:
+        raise HTTPException(403, {"code": "account_suspended", "message": "Ce compte est suspendu. Contactez le support."})
+    user.password_hash = hash_password(body.password)
+    user.reset_code_hash = None
+    user.reset_expires_at = None
+    user.session_version += 1
+    if not user.email_verified:          # recevoir le code prouve que l'adresse est bien la sienne
+        user.email_verified = True
+        user.verify_code_hash = None
+        await welcome_credits(session, user)
+    await session.commit()
+    return {"token": create_token(user.id, user.session_version)}

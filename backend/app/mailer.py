@@ -62,3 +62,15 @@ async def send_code(to: str, name: str, code: str, minutes: int) -> None:
 <p>Il est valable {minutes} minutes. Si vous n'avez pas créé de compte, ignorez cet e-mail.</p>
 <p>L'équipe MangaStudio</p></div>"""
     await send(to, f"{code} est votre code MangaStudio", text, html)
+
+
+async def send_reset_code(to: str, name: str, code: str, minutes: int) -> None:
+    text = (f"Bonjour {name},\n\nVoici votre code pour choisir un nouveau mot de passe sur MangaStudio :\n\n    {code}\n\n"
+            f"Il est valable {minutes} minutes. Si vous n'avez rien demandé, ignorez cet e-mail : votre mot de passe actuel reste valable.\n\nL'équipe MangaStudio")
+    html = f"""<div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;color:#14110F">
+<p>Bonjour {name},</p>
+<p>Voici votre code pour choisir un nouveau mot de passe sur <b>MangaStudio</b> :</p>
+<p style="font-size:32px;font-weight:bold;letter-spacing:8px;background:#FFFDF8;border:2px solid #14110F;padding:16px;text-align:center">{code}</p>
+<p>Il est valable {minutes} minutes. Si vous n'avez rien demandé, ignorez cet e-mail : votre mot de passe actuel reste valable.</p>
+<p>L'équipe MangaStudio</p></div>"""
+    await send(to, f"{code} : nouveau mot de passe MangaStudio", text, html)

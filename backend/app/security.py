@@ -33,9 +33,9 @@ def verify_password(password: str, stored: str) -> bool:
         return False
 
 
-def create_token(user_id: str) -> str:
+def create_token(user_id: str, version: int = 0) -> str:
     exp = datetime.now(timezone.utc) + timedelta(days=TOKEN_DAYS)
-    return jwt.encode({"sub": user_id, "exp": exp}, get_settings().secret_key, algorithm="HS256")
+    return jwt.encode({"sub": user_id, "v": version, "exp": exp}, get_settings().secret_key, algorithm="HS256")
 
 
 async def current_user(
@@ -51,6 +51,8 @@ async def current_user(
     user = await session.get(User, payload["sub"])
     if not user:
         raise HTTPException(401, "Compte introuvable.")
+    if payload.get("v", 0) != user.session_version:
+        raise HTTPException(401, "Votre mot de passe a changé : reconnectez-vous.")
     if not user.is_active:
         raise HTTPException(403, {"code": "account_suspended", "message": "Ce compte est suspendu. Contactez le support."})
     return user

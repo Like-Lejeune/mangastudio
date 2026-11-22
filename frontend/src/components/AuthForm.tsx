@@ -32,6 +32,9 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
           <Field label="Mot de passe" htmlFor="pw" hint={reg ? <p className="text-[12px] text-encre-douce">8 caractères au moins.</p> : undefined}>
             <Input id="pw" type="password" required minLength={reg ? 8 : undefined} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={reg ? "new-password" : "current-password"} />
           </Field>
+          {!reg && (
+            <Link to="/mot-de-passe-oublie" className="-mt-2 self-end text-[14px] font-bold text-indigo underline">Mot de passe oublié ?</Link>
+          )}
           <ErrorNote error={m.error} />
           <Button type="submit" variant="primary" disabled={m.isPending}>{m.isPending ? "Un instant…" : reg ? "Créer mon compte" : "Se connecter"}</Button>
         </form>

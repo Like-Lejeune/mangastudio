@@ -17,6 +17,7 @@ import { Route as ContactRouteImport } from './routes/contact'
 import { Route as FaqRouteImport } from './routes/faq'
 import { Route as InscriptionRouteImport } from './routes/inscription'
 import { Route as MonAvisRouteImport } from './routes/mon-avis'
+import { Route as MotDePasseOublieRouteImport } from './routes/mot-de-passe-oublie'
 import { Route as SoutenirRouteImport } from './routes/soutenir'
 import { Route as StylesRouteImport } from './routes/styles'
 import { Route as VerifierRouteImport } from './routes/verifier'
@@ -70,6 +71,11 @@ const InscriptionRoute = InscriptionRouteImport.update({
 const MonAvisRoute = MonAvisRouteImport.update({
   id: '/mon-avis',
   path: '/mon-avis',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MotDePasseOublieRoute = MotDePasseOublieRouteImport.update({
+  id: '/mot-de-passe-oublie',
+  path: '/mot-de-passe-oublie',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SoutenirRoute = SoutenirRouteImport.update({
@@ -152,6 +158,7 @@ export interface FileRoutesByFullPath {
   '/faq': typeof FaqRoute
   '/inscription': typeof InscriptionRoute
   '/mon-avis': typeof MonAvisRoute
+  '/mot-de-passe-oublie': typeof MotDePasseOublieRoute
   '/soutenir': typeof SoutenirRoute
   '/styles': typeof StylesRoute
   '/verifier': typeof VerifierRoute
@@ -175,6 +182,7 @@ export interface FileRoutesByTo {
   '/faq': typeof FaqRoute
   '/inscription': typeof InscriptionRoute
   '/mon-avis': typeof MonAvisRoute
+  '/mot-de-passe-oublie': typeof MotDePasseOublieRoute
   '/soutenir': typeof SoutenirRoute
   '/styles': typeof StylesRoute
   '/verifier': typeof VerifierRoute
@@ -200,6 +208,7 @@ export interface FileRoutesById {
   '/faq': typeof FaqRoute
   '/inscription': typeof InscriptionRoute
   '/mon-avis': typeof MonAvisRoute
+  '/mot-de-passe-oublie': typeof MotDePasseOublieRoute
   '/soutenir': typeof SoutenirRoute
   '/styles': typeof StylesRoute
   '/verifier': typeof VerifierRoute
@@ -226,6 +235,7 @@ export interface FileRouteTypes {
     | '/faq'
     | '/inscription'
     | '/mon-avis'
+    | '/mot-de-passe-oublie'
     | '/soutenir'
     | '/styles'
     | '/verifier'
@@ -249,6 +259,7 @@ export interface FileRouteTypes {
     | '/faq'
     | '/inscription'
     | '/mon-avis'
+    | '/mot-de-passe-oublie'
     | '/soutenir'
     | '/styles'
     | '/verifier'
@@ -273,6 +284,7 @@ export interface FileRouteTypes {
     | '/faq'
     | '/inscription'
     | '/mon-avis'
+    | '/mot-de-passe-oublie'
     | '/soutenir'
     | '/styles'
     | '/verifier'
@@ -298,6 +310,7 @@ export interface RootRouteChildren {
   FaqRoute: typeof FaqRoute
   InscriptionRoute: typeof InscriptionRoute
   MonAvisRoute: typeof MonAvisRoute
+  MotDePasseOublieRoute: typeof MotDePasseOublieRoute
   SoutenirRoute: typeof SoutenirRoute
   StylesRoute: typeof StylesRoute
   VerifierRoute: typeof VerifierRoute
@@ -361,6 +374,13 @@ declare module '@tanstack/react-router' {
       path: '/mon-avis'
       fullPath: '/mon-avis'
       preLoaderRoute: typeof MonAvisRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mot-de-passe-oublie': {
+      id: '/mot-de-passe-oublie'
+      path: '/mot-de-passe-oublie'
+      fullPath: '/mot-de-passe-oublie'
+      preLoaderRoute: typeof MotDePasseOublieRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/soutenir': {
@@ -499,6 +519,7 @@ const rootRouteChildren: RootRouteChildren = {
   FaqRoute: FaqRoute,
   InscriptionRoute: InscriptionRoute,
   MonAvisRoute: MonAvisRoute,
+  MotDePasseOublieRoute: MotDePasseOublieRoute,
   SoutenirRoute: SoutenirRoute,
   StylesRoute: StylesRoute,
   VerifierRoute: VerifierRoute,
