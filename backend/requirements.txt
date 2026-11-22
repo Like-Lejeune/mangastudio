@@ -11,3 +11,4 @@ stripe>=10             # seulement si Stripe est activé
 arq>=0.26              # seulement si REDIS_URL est défini
 pytest>=8
 pytest-asyncio>=0.24
+pillow>=10.4      # scripts/exemples_styles.py : réduit les images d'exemple en WebP

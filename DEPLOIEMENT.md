@@ -80,6 +80,14 @@ Pour tester le classeur de scènes interdites avec le vrai modèle (20 cas inter
 docker compose exec api python -m scripts.test_scenes
 ```
 
+## Confirmation des adresses e-mail
+
+Chaque nouveau compte reçoit un code à 6 chiffres par e-mail. Il n'a ni crédit offert, ni accès aux séries, épisodes et paiements avant de l'avoir saisi. Les adresses jetables (yopmail, mailinator…) sont refusées : pour en ajouter, utilisez `BLOCKED_EMAIL_DOMAINS=domaine1.com,domaine2.com`.
+
+Pour l'envoi, créez une boîte dans hPanel › E-mails (par exemple `noreply@psikalab.space`), puis remplissez le bloc `SMTP_…` de `.env.production`. Sans lui, l'API refuse de démarrer en production. Les comptes créés avant cette mise à jour sont considérés comme confirmés.
+
+Si un utilisateur ne reçoit pas son code, *Administration › Utilisateurs › filtre « E-mail non confirmé »* liste ces comptes. La fiche du compte permet de confirmer l'adresse à sa place.
+
 ## Ports 80 et 443 déjà utilisés par un autre serveur web
 
 `vps/deployer.sh` s'adapte à ce qu'il trouve sur le VPS :

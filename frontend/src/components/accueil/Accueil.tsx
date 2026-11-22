@@ -6,6 +6,8 @@ import { api, type Plans } from "@/lib/api";
 import { AVIS, PARTENAIRES, type Avis, type Partenaire } from "@/content/accueil";
 import { btnClass, Onomatopee } from "@/components/ink";
 import { cn } from "@/lib/utils";
+import { STYLES_MANGA } from "@/content/styles";
+import { VignetteStyle } from "@/components/StyleManga";
 import { Esquisses, IconeEtape, PlancheAnimee } from "./Planche";
 
 /** Ajoute .anime quand l'élément arrive à l'écran (une seule fois). */
@@ -43,6 +45,9 @@ const fcfa = (n: number) => `${new Intl.NumberFormat("fr-FR").format(n)} FCFA`;
 export function Accueil() {
   const { data: plans } = useQuery({ queryKey: ["plans"], queryFn: () => api<Plans>("/plans"), staleTime: 3_600_000 });
   const studio = plans?.plans.find((p) => p.id === "studio");
+  // Avis validés dans l'administration, puis ceux écrits à la main dans content/accueil.ts.
+  const { data: avisEnLigne } = useQuery({ queryKey: ["avis-publics"], queryFn: () => api<(Avis & { id: string })[]>("/testimonials"), staleTime: 300_000 });
+  const avis: Avis[] = [...(avisEnLigne ?? []), ...AVIS];
 
   return (
     <div className="overflow-x-clip">
@@ -90,7 +95,7 @@ export function Accueil() {
         <Titre sur="Comment ça marche" sous="Trois étapes, quelques minutes, et votre épisode se lit page après page.">De l'idée à la planche</Titre>
         <ol className="grid gap-6 md:grid-cols-3">
           {([
-            [1, "Racontez l'idée", "Une phrase ou une page : le pitch de votre série, son style (shōnen, shōjo, seinen, kodomo) et sa langue."],
+            [1, "Racontez l'idée", "Une phrase ou une page : le pitch de votre série, son style (shōnen, shōjo, seinen, kodomo ou afro-manga) et sa langue."],
             [2, "Présentez vos personnages", `Nom, rôle, description et, si vous le voulez, une photo. Jusqu'à ${studio?.max_characters ?? 10} personnages par épisode, chacun avec sa fiche modèle.`],
             [3, "Regardez l'épisode se dessiner", `Le scénario est écrit puis vérifié, et chaque page est dessinée sous vos yeux. Jusqu'à ${studio?.max_pages ?? 24} pages par épisode.`],
           ] as const).map(([n, t, d], i) => (
@@ -102,6 +107,26 @@ export function Accueil() {
             </Revele>
           ))}
         </ol>
+      </section>
+
+      {/* ───── Les styles ───── */}
+      <section className="mx-auto max-w-[1200px] px-4 pb-20 sm:px-6">
+        <Titre sur="Cinq styles" sous="Du combat épique au conte pour enfants, et un style né ici : l'afro-manga.">Choisissez votre trait</Titre>
+        <ul className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-5">
+          {STYLES_MANGA.map((st, i) => (
+            <Revele as="li" key={st.id} delai={i * 0.08}>
+              <Link to="/styles" hash={st.id} className="group block">
+                <div className="relative">
+                  <VignetteStyle style={st} legende className="aspect-[2/3] w-full shadow-ink transition-transform group-hover:-translate-y-1" />
+                  {st.nouveau && <span className="absolute -right-2 -top-3 rotate-6 rounded-[4px] border-2 border-encre bg-soleil px-2 py-0.5 text-[12px] font-bold">Nouveau</span>}
+                </div>
+                <p className="mt-3 font-display text-[20px] leading-[26px]">{st.nom}</p>
+                <p className="text-[14px] leading-5 text-encre-douce">{st.accroche}</p>
+              </Link>
+            </Revele>
+          ))}
+        </ul>
+        <p className="mt-8 text-center"><Link to="/styles" className="font-bold text-indigo underline">Comparer les styles en détail</Link></p>
       </section>
 
       {/* ───── Ce qui est inclus ───── */}
@@ -123,11 +148,12 @@ export function Accueil() {
       </section>
 
       {/* ───── Avis ───── */}
-      {AVIS.length > 0 && (
+      {avis.length > 0 && (
         <section className="mx-auto max-w-[1200px] px-4 pt-20 sm:px-6">
           <Titre sur="Ils nous font confiance">Ce qu'en disent nos auteurs</Titre>
-          <ul className="grid gap-x-6 gap-y-10 md:grid-cols-2 lg:grid-cols-3">
-            {AVIS.map((a, i) => <CarteAvis key={a.nom + i} avis={a} delai={(i % 3) * 0.15} />)}
+          {/* Centré : un ou deux avis au lancement ne restent pas collés à gauche. */}
+          <ul className="flex flex-wrap justify-center gap-x-6 gap-y-10 [&>li]:w-full md:[&>li]:w-[calc(50%-12px)] lg:[&>li]:w-[calc(33.333%-16px)]">
+            {avis.map((a, i) => <CarteAvis key={a.nom + i} avis={a} delai={(i % 3) * 0.15} />)}
           </ul>
         </section>
       )}

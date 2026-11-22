@@ -10,6 +10,20 @@ class Register(BaseModel):
     password: str = Field(min_length=8, max_length=200)
 
 
+class VerifyIn(BaseModel):
+    code: str = Field(pattern=r"^\s*\d{6}\s*$")
+
+
+class ForgotIn(BaseModel):
+    email: str = Field(pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", max_length=255)
+
+
+class ResetIn(BaseModel):
+    email: str = Field(pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", max_length=255)
+    code: str = Field(pattern=r"^\s*\d{6}\s*$")
+    password: str = Field(min_length=8, max_length=200)
+
+
 class Login(BaseModel):
     email: str
     password: str
@@ -17,7 +31,7 @@ class Login(BaseModel):
 
 class SeriesIn(BaseModel):
     premise: str = Field(min_length=8, max_length=1500)
-    style: Literal["shonen", "shojo", "seinen", "kodomo"] = "shonen"
+    style: Literal["shonen", "shojo", "seinen", "kodomo", "afro"] = "shonen"
     palette: Literal["bw", "color"] = "bw"
     language: Literal["fr", "en"] = "fr"
 
@@ -82,3 +96,16 @@ class AdminStatusIn(BaseModel):
 
 class AdminRoleIn(BaseModel):
     is_admin: bool
+
+
+class TestimonialIn(BaseModel):
+    text: str = Field(min_length=10, max_length=280)
+    rating: int = Field(ge=1, le=5)
+    display_name: str = Field(min_length=2, max_length=60)
+    role: str = Field(default="", max_length=80)
+    consent: bool
+    episode_id: str | None = None
+
+
+class TestimonialStatusIn(BaseModel):
+    status: Literal["approved", "rejected", "pending"]

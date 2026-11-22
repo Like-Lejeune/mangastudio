@@ -23,6 +23,7 @@ function UserPage() {
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <h2 className="font-display text-[28px] leading-[34px]">{u.display_name}</h2>
         {u.is_active ? <Pill tone="succes">Actif</Pill> : <Pill tone="alerte">Suspendu</Pill>}
+        {!u.email_verified && <Pill tone="soleil">E-mail non confirmé</Pill>}
         {u.is_admin && <Pill tone="indigo">Administrateur</Pill>}
       </div>
       <p className="mt-1 break-all text-encre-douce">{u.email} · inscrit le {day(u.created_at)}</p>
@@ -38,6 +39,7 @@ function UserPage() {
 
       <Section title="Actions">
         <div className="grid gap-4 lg:grid-cols-2">
+          {!u.email_verified && <VerifyAction id={u.id} />}
           <CreditsAction id={u.id} />
           <PlanAction id={u.id} current={u.plan.id} />
           <StatusAction id={u.id} active={u.is_active} disabled={self} />
@@ -237,6 +239,19 @@ function RoleAction({ id, isAdmin, disabled }: { id: string; isAdmin: boolean; d
           <Button type="submit" className="self-start" disabled={m.isPending || !sure}>{isAdmin ? "Retirer les droits" : "Rendre administrateur"}</Button>
         </>
       )}
+    </ActionCard>
+  );
+}
+
+function VerifyAction({ id }: { id: string }) {
+  const m = useAction(id, "verify-email");
+  return (
+    <ActionCard title="Confirmer l'adresse e-mail" m={m} done="Adresse confirmée, crédits offerts ajoutés."
+      onSubmit={(e) => { e.preventDefault(); m.mutate({}); }}>
+      <p className="text-[14px] leading-5 text-encre-douce">
+        Ce compte n'a pas saisi son code. À faire seulement si vous avez vérifié l'adresse autrement (la personne vous a contacté, par exemple) : le compte reçoit alors ses crédits offerts.
+      </p>
+      <Button type="submit" variant="primary" className="self-start" disabled={m.isPending}>Confirmer l'adresse</Button>
     </ActionCard>
   );
 }

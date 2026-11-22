@@ -6,10 +6,14 @@ import { Plus } from "lucide-react";
 import { api, type SeriesItem } from "@/lib/api";
 import { useMe, useToken } from "@/lib/session";
 import { Accueil } from "@/components/accueil/Accueil";
-import { Button, Card, Container, ErrorNote, Field, PageTitle, Textarea } from "@/components/ink";
+import { STYLES_MANGA, styleParId } from "@/content/styles";
+import { VignetteStyle } from "@/components/StyleManga";
+import { Button, Card, Container, ErrorNote, Field, PageTitle, RequireAuth, Textarea } from "@/components/ink";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
+  // ?style=afro : la page « Styles » pré-sélectionne le style choisi.
+  validateSearch: (search: Record<string, unknown>): { style?: string } => (typeof search.style === "string" ? { style: search.style } : {}),
   head: () => ({
     meta: [
       { title: "MangaStudio — Vos idées deviennent des épisodes de manga" },
@@ -26,10 +30,9 @@ export const Route = createFileRoute("/")({
 function Index() {
   const token = useToken();
   if (token === undefined) return null;
-  return token ? <MesSeries /> : <Accueil />;
+  return token ? <RequireAuth><MesSeries /></RequireAuth> : <Accueil />;
 }
 
-const STYLES = [["shonen", "Shōnen"], ["shojo", "Shōjo"], ["seinen", "Seinen"], ["kodomo", "Kodomo"]] as const;
 
 function Choice({ name, value, current, onChange, label, disabled, note }: { name: string; value: string; current: string; onChange: (v: string) => void; label: string; disabled?: boolean; note?: string | undefined }) {
   const on = current === value;
@@ -48,7 +51,8 @@ function MesSeries() {
   const qc = useQueryClient();
   const nav = useNavigate();
   const [idea, setIdea] = useState("");
-  const [style, setStyle] = useState("shonen");
+  const { style: styleDemande } = Route.useSearch();
+  const [style, setStyle] = useState(styleDemande && styleParId(styleDemande) ? styleDemande : "shonen");
   const [render, setRender] = useState("bw");
   const [lang, setLang] = useState("fr");
   const create = useMutation({
@@ -89,8 +93,24 @@ function MesSeries() {
             </>}>
               <Textarea id="idea" required minLength={8} maxLength={1500} value={idea} onChange={(e) => setIdea(e.target.value)} placeholder="Une lycéenne découvre que son chat garde le portail entre deux mondes…" aria-invalid={blocked} />
             </Field>
-            <fieldset className="flex flex-col gap-2"><legend className="label-caps mb-2">Style</legend>
-              <div className="grid grid-cols-2 gap-2">{STYLES.map(([v, l]) => <Choice key={v} name="style" value={v} label={l} current={style} onChange={setStyle} />)}</div>
+            <fieldset className="flex flex-col gap-2">
+              <legend className="label-caps mb-2">Style</legend>
+              <div className="flex flex-col gap-2">
+                {STYLES_MANGA.map((s) => {
+                  const on = style === s.id;
+                  return (
+                    <label key={s.id} className={cn("flex cursor-pointer items-center gap-3 rounded-[4px] border-2 border-encre p-2", on ? "bg-vermillon text-sur-vermillon" : "bg-bulle hover:bg-papier")}>
+                      <input type="radio" name="style" value={s.id} checked={on} onChange={() => setStyle(s.id)} className="sr-only" />
+                      <VignetteStyle style={s} className="aspect-[2/3] w-12 shrink-0" />
+                      <span className="min-w-0">
+                        <span className="flex items-center gap-2 font-bold">{s.nom}{s.nouveau && <span className="rounded-full bg-soleil px-2 text-[11px] text-encre">Nouveau</span>}</span>
+                        <span className={cn("block text-[13px] leading-5", on ? "text-sur-vermillon" : "text-encre-douce")}>{s.accroche}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <Link to="/styles" target="_blank" className="mt-1 self-start text-[14px] font-bold text-indigo underline">Voir les styles en détail (nouvel onglet)</Link>
             </fieldset>
             <fieldset><legend className="label-caps mb-2">Rendu</legend>
               <div className="grid grid-cols-2 gap-2">

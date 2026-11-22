@@ -12,7 +12,7 @@ from app.plans import MIN_PAGES
 from app.queue import enqueue
 from app.routers.series import owned_series, refuse_blocked
 from app.schemas import EpisodeIn, RedrawIn
-from app.security import current_user
+from app.security import verified_user
 from app.services import current_plan
 
 router = APIRouter(tags=["épisodes"])
@@ -43,7 +43,7 @@ async def reserve_or_402(session: AsyncSession, user: User, episode: Episode) ->
 
 
 @router.post("/series/{series_id}/episodes", status_code=202)
-async def create_episode(series_id: str, body: EpisodeIn, user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
+async def create_episode(series_id: str, body: EpisodeIn, user: User = Depends(verified_user), session: AsyncSession = Depends(get_session)):
     """Admission d'un nouvel épisode : limites du plan, modération du texte saisi, réserve de crédits, puis file d'attente."""
     series = await owned_series(session, user, series_id)
     if any(e.status in RUNNING for e in series.episodes):
@@ -91,20 +91,20 @@ async def episode_out(session: AsyncSession, e: Episode) -> dict:
 
 
 @router.get("/episodes/{episode_id}")
-async def get_episode(episode_id: str, user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
+async def get_episode(episode_id: str, user: User = Depends(verified_user), session: AsyncSession = Depends(get_session)):
     """État complet de l'épisode ; le frontend l'interroge toutes les 2 s pendant la génération."""
     return await episode_out(session, await owned_episode(session, user, episode_id))
 
 
 @router.get("/episodes/{episode_id}/usage")
-async def get_usage(episode_id: str, user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
+async def get_usage(episode_id: str, user: User = Depends(verified_user), session: AsyncSession = Depends(get_session)):
     """Tokens, images et crédits de l'épisode, avec le détail par étape."""
     e = await owned_episode(session, user, episode_id)
     return await usage.episode_usage(session, e.id)
 
 
 @router.post("/episodes/{episode_id}/resume", status_code=202)
-async def resume(episode_id: str, user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
+async def resume(episode_id: str, user: User = Depends(verified_user), session: AsyncSession = Depends(get_session)):
     """Reprend un épisode interrompu : seul ce qui manque est réservé puis dessiné."""
     e = await owned_episode(session, user, episode_id)
     if e.status != "failed":
@@ -121,7 +121,7 @@ async def resume(episode_id: str, user: User = Depends(current_user), session: A
 
 
 @router.post("/pages/{page_id}/redraw", status_code=202)
-async def redraw(page_id: str, body: RedrawIn, user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
+async def redraw(page_id: str, body: RedrawIn, user: User = Depends(verified_user), session: AsyncSession = Depends(get_session)):
     """Redessine une page avec une remarque de l'utilisateur (1 crédit, plans payants)."""
     page = await session.get(Page, page_id)
     if not page:

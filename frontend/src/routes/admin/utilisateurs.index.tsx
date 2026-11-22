@@ -34,6 +34,7 @@ function UsersPage() {
             <option value="active">Actifs</option>
             <option value="suspended">Suspendus</option>
             <option value="admin">Administrateurs</option>
+            <option value="unverified">E-mail non confirmé</option>
           </select>
         </div>
         <Button type="submit" variant="primary"><Search size={18} strokeWidth={2} aria-hidden />Rechercher</Button>
@@ -55,6 +56,7 @@ function UsersPage() {
                 <td className="tabular whitespace-nowrap">{day(u.created_at)}</td>
                 <td className="space-x-1 whitespace-nowrap">
                   {u.is_active ? <Pill tone="succes">Actif</Pill> : <Pill tone="alerte">Suspendu</Pill>}
+                  {!u.email_verified && <Pill tone="soleil">Non confirmé</Pill>}
                   {u.is_admin && <Pill tone="indigo">Admin</Pill>}
                 </td>
               </tr>

@@ -40,7 +40,7 @@ sed -i 's/\r$//' "$ENV_FILE"
 # Lien .env → .env.production : « docker compose … » marche ensuite sans --env-file.
 [[ -L .env || ! -e .env ]] && ln -sfn "$ENV_FILE" .env
 manque=()
-for v in APP_DOMAIN API_DOMAIN PUBLIC_BASE_URL FRONTEND_URL POSTGRES_PASSWORD SECRET_KEY ADMIN_EMAILS META_API_KEY; do
+for v in APP_DOMAIN API_DOMAIN PUBLIC_BASE_URL FRONTEND_URL POSTGRES_PASSWORD SECRET_KEY ADMIN_EMAILS META_API_KEY SMTP_HOST SMTP_USER SMTP_PASSWORD; do
   [[ -n "$(val "$v")" ]] || manque+=("$v")
 done
 [[ ${#manque[@]} -eq 0 ]] || stop "À remplir dans $ENV_FILE : ${manque[*]}"

@@ -20,6 +20,19 @@ class Settings(BaseSettings):
     # ou à la connexion suivante. Aucun autre moyen de devenir administrateur que celui-ci ou l'admin.
     admin_emails: str = ""
 
+    # Vérification de l'adresse e-mail : code à 6 chiffres envoyé à l'inscription. Pas de crédit ni de
+    # génération avant vérification. À ne désactiver que pour les tests automatiques.
+    email_verification: bool = True
+    # Envoi des e-mails (SMTP). Hostinger : smtp.hostinger.com, port 465 (SSL).
+    smtp_host: str = ""
+    smtp_port: int = 465
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""                 # ex. MangaStudio <noreply@psikalab.space> ; vide = SMTP_USER
+    smtp_starttls: bool = False         # True pour le port 587 (STARTTLS), False pour 465 (SSL direct)
+    # Domaines d'adresses jetables refusés en plus de la liste intégrée (séparés par des virgules).
+    blocked_email_domains: str = ""
+
     # Limites de tentatives (par adresse IP du visiteur)
     login_max_failures: int = 5          # échecs pour un même compte, puis attente
     login_max_failures_ip: int = 30      # échecs tous comptes confondus

@@ -6,6 +6,13 @@ STYLES: dict[str, dict[str, str]] = {
     "shojo": {"label": "Shōjo", "art": "romantic manga: fine delicate linework, expressive eyes, soft gradients, decorative backgrounds"},
     "seinen": {"label": "Seinen", "art": "mature dramatic manga: dense hatching, deep blacks, realistic proportions, cinematic framing"},
     "kodomo": {"label": "Kodomo", "art": "children's manga: round simple shapes, thick clean outlines, friendly faces, light tones"},
+    "afro": {"label": "Afro-manga", "art": (
+        "afro-manga: Japanese manga storytelling and inking applied to African characters and places. Skin tones drawn "
+        "with care and variety, natural hair textures and styles (coils, locs, braids, twists, headwraps) rendered precisely, "
+        "real contemporary African settings (busy markets, moto-taxis, compounds, modern city streets, savanna, forest) "
+        "and textile patterns (wax print, kente, bogolan, ndop) used in clothing and backgrounds as bold graphic screentone. "
+        "Dynamic manga framing and expressive faces; respectful, never caricatural"
+    )},
 }
 LANGUAGES = {"fr": "French", "en": "English"}
 

@@ -35,6 +35,11 @@ class User(Base):
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     # Un compte suspendu ne peut plus se connecter ni appeler l'API ; ses données sont gardées.
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    # Adresse vérifiée par code. Les comptes créés avant la vérification sont considérés comme vérifiés.
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default=true())
+    verify_code_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    verify_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    verify_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
@@ -227,3 +232,19 @@ class AdminAction(Base):
     target_id: Mapped[str] = mapped_column(String(64), index=True)
     detail: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+
+
+class Testimonial(Base):
+    """Avis laissé par un utilisateur. Publié sur l'accueil seulement après son accord et la validation d'un administrateur."""
+    __tablename__ = "testimonials"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)   # un avis par compte, modifiable
+    episode_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    text: Mapped[str] = mapped_column(Text)
+    rating: Mapped[int] = mapped_column(Integer)
+    display_name: Mapped[str] = mapped_column(String(60))     # comment la personne accepte d'être citée
+    role: Mapped[str] = mapped_column(String(80), default="")
+    consent: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(10), default="pending", index=True)   # pending | approved | rejected
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

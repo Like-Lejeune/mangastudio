@@ -56,6 +56,13 @@ async def current_user(
     return user
 
 
+async def verified_user(user: User = Depends(current_user)) -> User:
+    """Tout ce qui coûte (séries, épisodes, paiements, avis) exige une adresse vérifiée."""
+    if not user.email_verified:
+        raise HTTPException(403, {"code": "email_unverified", "message": "Confirmez d'abord votre adresse e-mail avec le code reçu."})
+    return user
+
+
 async def admin_user(user: User = Depends(current_user)) -> User:
     if not user.is_admin:
         raise HTTPException(403, "Réservé aux administrateurs.")

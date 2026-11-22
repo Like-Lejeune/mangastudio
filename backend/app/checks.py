@@ -27,6 +27,10 @@ def problems(s: Settings) -> tuple[list[str], list[str]]:
         errors.append("Un fournisseur IA est resté sur « fake » : les clients recevraient des pages vides.")
     if "meta_muse" in (s.writer_provider, s.checker_provider, s.image_provider) and not s.meta_api_key:
         errors.append("META_API_KEY est vide alors que Muse est utilisé.")
+    if s.email_verification and not (s.smtp_host and s.smtp_user and s.smtp_password):
+        errors.append("SMTP_HOST, SMTP_USER et SMTP_PASSWORD sont requis : sans envoi d'e-mails, personne ne pourrait confirmer son adresse.")
+    if not s.email_verification:
+        warnings.append("EMAIL_VERIFICATION=false : n'importe qui peut créer des comptes avec des adresses inventées.")
     if not s.admin_email_set:
         warnings.append("ADMIN_EMAILS est vide : personne ne pourra ouvrir l'administration.")
     if s.trustchange_api_key and not s.trustchange_webhook_secret:

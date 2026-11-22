@@ -16,8 +16,12 @@ import { Route as ConnexionRouteImport } from './routes/connexion'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as FaqRouteImport } from './routes/faq'
 import { Route as InscriptionRouteImport } from './routes/inscription'
+import { Route as MonAvisRouteImport } from './routes/mon-avis'
 import { Route as SoutenirRouteImport } from './routes/soutenir'
+import { Route as StylesRouteImport } from './routes/styles'
+import { Route as VerifierRouteImport } from './routes/verifier'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as AdminAvisRouteImport } from './routes/admin/avis'
 import { Route as AdminJournalRouteImport } from './routes/admin/journal'
 import { Route as AdminModerationRouteImport } from './routes/admin/moderation'
 import { Route as AdminPaiementsRouteImport } from './routes/admin/paiements'
@@ -63,14 +67,34 @@ const InscriptionRoute = InscriptionRouteImport.update({
   path: '/inscription',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MonAvisRoute = MonAvisRouteImport.update({
+  id: '/mon-avis',
+  path: '/mon-avis',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SoutenirRoute = SoutenirRouteImport.update({
   id: '/soutenir',
   path: '/soutenir',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StylesRoute = StylesRouteImport.update({
+  id: '/styles',
+  path: '/styles',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerifierRoute = VerifierRouteImport.update({
+  id: '/verifier',
+  path: '/verifier',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAvisRoute = AdminAvisRouteImport.update({
+  id: '/avis',
+  path: '/avis',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminJournalRoute = AdminJournalRouteImport.update({
@@ -127,7 +151,11 @@ export interface FileRoutesByFullPath {
   '/contact': typeof ContactRoute
   '/faq': typeof FaqRoute
   '/inscription': typeof InscriptionRoute
+  '/mon-avis': typeof MonAvisRoute
   '/soutenir': typeof SoutenirRoute
+  '/styles': typeof StylesRoute
+  '/verifier': typeof VerifierRoute
+  '/admin/avis': typeof AdminAvisRoute
   '/admin/journal': typeof AdminJournalRoute
   '/admin/moderation': typeof AdminModerationRoute
   '/admin/paiements': typeof AdminPaiementsRoute
@@ -146,7 +174,11 @@ export interface FileRoutesByTo {
   '/contact': typeof ContactRoute
   '/faq': typeof FaqRoute
   '/inscription': typeof InscriptionRoute
+  '/mon-avis': typeof MonAvisRoute
   '/soutenir': typeof SoutenirRoute
+  '/styles': typeof StylesRoute
+  '/verifier': typeof VerifierRoute
+  '/admin/avis': typeof AdminAvisRoute
   '/admin/journal': typeof AdminJournalRoute
   '/admin/moderation': typeof AdminModerationRoute
   '/admin/paiements': typeof AdminPaiementsRoute
@@ -167,7 +199,11 @@ export interface FileRoutesById {
   '/contact': typeof ContactRoute
   '/faq': typeof FaqRoute
   '/inscription': typeof InscriptionRoute
+  '/mon-avis': typeof MonAvisRoute
   '/soutenir': typeof SoutenirRoute
+  '/styles': typeof StylesRoute
+  '/verifier': typeof VerifierRoute
+  '/admin/avis': typeof AdminAvisRoute
   '/admin/journal': typeof AdminJournalRoute
   '/admin/moderation': typeof AdminModerationRoute
   '/admin/paiements': typeof AdminPaiementsRoute
@@ -189,7 +225,11 @@ export interface FileRouteTypes {
     | '/contact'
     | '/faq'
     | '/inscription'
+    | '/mon-avis'
     | '/soutenir'
+    | '/styles'
+    | '/verifier'
+    | '/admin/avis'
     | '/admin/journal'
     | '/admin/moderation'
     | '/admin/paiements'
@@ -208,7 +248,11 @@ export interface FileRouteTypes {
     | '/contact'
     | '/faq'
     | '/inscription'
+    | '/mon-avis'
     | '/soutenir'
+    | '/styles'
+    | '/verifier'
+    | '/admin/avis'
     | '/admin/journal'
     | '/admin/moderation'
     | '/admin/paiements'
@@ -228,7 +272,11 @@ export interface FileRouteTypes {
     | '/contact'
     | '/faq'
     | '/inscription'
+    | '/mon-avis'
     | '/soutenir'
+    | '/styles'
+    | '/verifier'
+    | '/admin/avis'
     | '/admin/journal'
     | '/admin/moderation'
     | '/admin/paiements'
@@ -249,7 +297,10 @@ export interface RootRouteChildren {
   ContactRoute: typeof ContactRoute
   FaqRoute: typeof FaqRoute
   InscriptionRoute: typeof InscriptionRoute
+  MonAvisRoute: typeof MonAvisRoute
   SoutenirRoute: typeof SoutenirRoute
+  StylesRoute: typeof StylesRoute
+  VerifierRoute: typeof VerifierRoute
   EpisodesIdRoute: typeof EpisodesIdRoute
   SeriesIdRoute: typeof SeriesIdRoute
 }
@@ -305,6 +356,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InscriptionRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mon-avis': {
+      id: '/mon-avis'
+      path: '/mon-avis'
+      fullPath: '/mon-avis'
+      preLoaderRoute: typeof MonAvisRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/soutenir': {
       id: '/soutenir'
       path: '/soutenir'
@@ -312,11 +370,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SoutenirRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/styles': {
+      id: '/styles'
+      path: '/styles'
+      fullPath: '/styles'
+      preLoaderRoute: typeof StylesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/verifier': {
+      id: '/verifier'
+      path: '/verifier'
+      fullPath: '/verifier'
+      preLoaderRoute: typeof VerifierRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/': {
       id: '/admin/'
       path: '/'
       fullPath: '/admin/'
       preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/avis': {
+      id: '/admin/avis'
+      path: '/avis'
+      fullPath: '/admin/avis'
+      preLoaderRoute: typeof AdminAvisRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/journal': {
@@ -386,6 +465,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AdminRouteChildren {
+  AdminAvisRoute: typeof AdminAvisRoute
   AdminJournalRoute: typeof AdminJournalRoute
   AdminModerationRoute: typeof AdminModerationRoute
   AdminPaiementsRoute: typeof AdminPaiementsRoute
@@ -397,6 +477,7 @@ interface AdminRouteChildren {
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
+  AdminAvisRoute: AdminAvisRoute,
   AdminJournalRoute: AdminJournalRoute,
   AdminModerationRoute: AdminModerationRoute,
   AdminPaiementsRoute: AdminPaiementsRoute,
@@ -417,7 +498,10 @@ const rootRouteChildren: RootRouteChildren = {
   ContactRoute: ContactRoute,
   FaqRoute: FaqRoute,
   InscriptionRoute: InscriptionRoute,
+  MonAvisRoute: MonAvisRoute,
   SoutenirRoute: SoutenirRoute,
+  StylesRoute: StylesRoute,
+  VerifierRoute: VerifierRoute,
   EpisodesIdRoute: EpisodesIdRoute,
   SeriesIdRoute: SeriesIdRoute,
 }

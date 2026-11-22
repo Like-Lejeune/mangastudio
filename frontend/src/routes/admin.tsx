@@ -1,4 +1,6 @@
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 import { useMe } from "@/lib/session";
 import { Container, RequireAuth } from "@/components/ink";
 
@@ -12,12 +14,18 @@ const TABS = [
   ["/admin/utilisateurs", "Utilisateurs", false],
   ["/admin/episodes", "Épisodes", false],
   ["/admin/paiements", "Paiements", false],
+  ["/admin/avis", "Avis", false],
   ["/admin/moderation", "Modération", false],
   ["/admin/journal", "Journal", false],
 ] as const;
 
 function AdminLayout() {
   const { data: me, isLoading } = useMe();
+  const { data: aRelire } = useQuery({
+    queryKey: ["admin", "avis", "compteur"], queryFn: () => api<{ total: number }>("/admin/testimonials?status=pending"),
+    enabled: !!me?.is_admin, refetchInterval: 60_000,
+  });
+  const enAttente = aRelire?.total ?? 0;
   if (isLoading) return <Container><p className="text-encre-douce">Chargement…</p></Container>;
   if (!me?.is_admin) {
     return (
@@ -39,6 +47,7 @@ function AdminLayout() {
             className="inline-flex min-h-11 items-center rounded-[4px] border-2 border-transparent px-3 font-bold hover:border-encre"
             activeProps={{ className: "!border-encre bg-encre text-bulle" }}>
             {label}
+            {to === "/admin/avis" && enAttente > 0 && <span className="tabular ml-2 rounded-full bg-vermillon px-2 text-[12px] text-sur-vermillon" aria-label={`${enAttente} à relire`}>{enAttente}</span>}
           </Link>
         ))}
       </nav>

@@ -75,10 +75,13 @@ export function Container({ children, className }: { children: ReactNode; classN
 }
 
 import { Navigate } from "@tanstack/react-router";
-import { useToken } from "@/lib/session";
-export function RequireAuth({ children }: { children: ReactNode }) {
+import { useMe, useToken } from "@/lib/session";
+/** Exige une connexion et, sauf `allowUnverified`, une adresse e-mail confirmée. */
+export function RequireAuth({ children, allowUnverified = false }: { children: ReactNode; allowUnverified?: boolean }) {
   const token = useToken();
+  const { data: me } = useMe();
   if (token === undefined) return null;
   if (!token) return <Navigate to="/connexion" replace />;
+  if (!allowUnverified && me && !me.email_verified) return <Navigate to="/verifier" replace />;
   return <>{children}</>;
 }

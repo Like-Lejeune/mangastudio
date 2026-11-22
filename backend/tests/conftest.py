@@ -9,6 +9,8 @@ os.environ.update({
     "TRUSTCHANGE_API_KEY": "tc_test_cle",
     "TRUSTCHANGE_BASE_URL": "https://trustchange.invalid",
     "TRUSTCHANGE_WEBHOOK_SECRET": "secret-de-test",
+    # Les tests existants créent des comptes et les utilisent aussitôt ; test_verification.py active la vérification.
+    "EMAIL_VERIFICATION": "false",
     "PRICES": '{"fake-writer":{"in":4,"out":20},"fake-checker":{"in":1,"out":4},"fake-image":{"image":0.04}}',
 })
 

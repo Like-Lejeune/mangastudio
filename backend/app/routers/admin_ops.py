@@ -22,6 +22,7 @@ from app.models import (
     PaymentIntent,
     Series,
     Subscription,
+    Testimonial,
     UsageEvent,
     User,
     now,
@@ -145,6 +146,7 @@ async def overview(session: AsyncSession = Depends(get_session)):
         "moderation_events": [{"id": m.id, "checkpoint": m.checkpoint, "action": m.action, "rule": m.rule, "excerpt": m.excerpt,
                                "user_email": em, "created_at": iso(m.created_at)} for m, em in events],
         "budget": await budget.status(session),
+        "testimonials_pending": (await session.execute(select(func.count()).select_from(Testimonial).where(Testimonial.status == "pending"))).scalar_one(),
         "generated_at": t.isoformat(),
     }
 
@@ -152,7 +154,7 @@ async def overview(session: AsyncSession = Depends(get_session)):
 # ─── Utilisateurs ─────────────────────────────────────────────────────────────
 
 @router.get("/users")
-async def users(q: str = "", status: str = Query("all", pattern="^(all|active|suspended|admin)$"), page: int = Query(1, ge=1),
+async def users(q: str = "", status: str = Query("all", pattern="^(all|active|suspended|admin|unverified)$"), page: int = Query(1, ge=1),
                 session: AsyncSession = Depends(get_session)):
     query = select(User)
     if q.strip():
@@ -164,6 +166,8 @@ async def users(q: str = "", status: str = Query("all", pattern="^(all|active|su
         query = query.where(User.is_active.is_(False))
     elif status == "admin":
         query = query.where(User.is_admin.is_(True))
+    elif status == "unverified":
+        query = query.where(User.email_verified.is_(False))
     total = await session.scalar(select(func.count()).select_from(query.subquery()))
     rows = (await session.execute(query.order_by(User.created_at.desc()).offset((page - 1) * PAGE_SIZE).limit(PAGE_SIZE))).scalars().all()
     ids = [u.id for u in rows]
@@ -176,7 +180,7 @@ async def users(q: str = "", status: str = Query("all", pattern="^(all|active|su
     for u in rows:
         plan, _ = await current_plan(session, u.id)
         items.append({"id": u.id, "email": u.email, "display_name": u.display_name, "is_admin": u.is_admin, "is_active": u.is_active,
-                      "plan": plan.id, "plan_name": plan.name, "credits": credits.get(u.id, 0), "episodes": eps.get(u.id, 0),
+                      "email_verified": u.email_verified, "plan": plan.id, "plan_name": plan.name, "credits": credits.get(u.id, 0), "episodes": eps.get(u.id, 0),
                       "last_episode_at": iso(last.get(u.id)), "created_at": iso(u.created_at)})
     return page_of(items, total, page)
 
@@ -208,6 +212,7 @@ async def user_detail(user_id: str, session: AsyncSession = Depends(get_session)
                                      .order_by(AdminAction.created_at.desc()).limit(30))).scalars().all()
     return {
         "id": u.id, "email": u.email, "display_name": u.display_name, "is_admin": u.is_admin, "is_active": u.is_active,
+        "email_verified": u.email_verified,
         "created_at": iso(u.created_at),
         "plan": {"id": plan.id, "name": plan.name},
         "subscription": {"plan": sub.plan, "status": sub.status, "provider": sub.provider, "period_end": iso(sub.period_end)} if sub else None,
@@ -275,6 +280,20 @@ async def set_plan(user_id: str, body: AdminPlanIn, admin: User = Depends(admin_
             f"plan {plan.name} pour {body.days} j{', avec ' + str(plan.credits) + ' crédits' if body.grant_credits else ''} — {body.reason}")
     await session.commit()
     return {"ok": True}
+
+
+@router.post("/users/{user_id}/verify-email")
+async def verify_email(user_id: str, admin: User = Depends(admin_user), session: AsyncSession = Depends(get_session)):
+    """Confirme l'adresse à la place de l'utilisateur (e-mail jamais reçu, vérification faite par téléphone…)."""
+    from app.routers.auth import welcome_credits
+    u = await get_user_or_404(session, user_id)
+    if not u.email_verified:
+        u.email_verified = True
+        u.verify_code_hash = None
+        await welcome_credits(session, u)
+        log(session, admin, "verify_email", "user", u.id, f"Adresse {u.email} confirmée par l'administration")
+        await session.commit()
+    return {"email_verified": True}
 
 
 @router.post("/users/{user_id}/status")

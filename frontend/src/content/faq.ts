@@ -5,7 +5,8 @@ export const FAQ: { rubrique: string; questions: Question[] }[] = [
   {
     rubrique: "Découvrir MangaStudio",
     questions: [
-      { q: "Qu'est-ce que MangaStudio ?", r: "Un studio de manga en ligne. Vous décrivez une histoire et vos personnages ; MangaStudio écrit le scénario puis dessine chaque page, avec les bulles, dans le style que vous choisissez (shōnen, shōjo, seinen, kodomo)." },
+      { q: "Qu'est-ce que MangaStudio ?", r: "Un studio de manga en ligne. Vous décrivez une histoire et vos personnages ; MangaStudio écrit le scénario puis dessine chaque page, avec les bulles, dans le style que vous choisissez : shōnen, shōjo, seinen, kodomo ou afro-manga." },
+      { q: "Quel style choisir ?", r: "Shōnen pour l'action et l'aventure, shōjo pour les émotions et la romance, seinen pour des récits adultes et réalistes, kodomo pour les enfants, afro-manga pour des personnages et des décors africains. La page « Styles » montre un exemple de chacun." },
       { q: "Faut-il savoir dessiner ?", r: "Non. Il suffit de raconter votre idée en quelques lignes et de présenter vos personnages. Vous pouvez ensuite guider chaque épisode : ce qui doit s'y passer, l'ambiance, la fin." },
       { q: "Combien de temps faut-il pour un épisode ?", r: "Quelques minutes, selon le nombre de pages. Vous suivez l'avancement en direct : scénario, fiches des personnages, puis chaque page au fur et à mesure qu'elle est dessinée." },
       { q: "Dans quelle langue sont les bulles ?", r: "En français ou en anglais : la langue se choisit à la création de la série." },
@@ -40,7 +41,10 @@ export const FAQ: { rubrique: string; questions: Question[] }[] = [
   {
     rubrique: "Mon compte",
     questions: [
-      { q: "J'ai oublié mon mot de passe.", r: "Écrivez-nous depuis l'adresse de votre compte : nous vous aidons à en définir un nouveau." },
+      { q: "Je ne reçois pas le code de confirmation.", r: "Regardez dans les courriers indésirables (spam), puis utilisez « Renvoyer le code » après une minute. Vérifiez aussi l'adresse affichée : en cas d'erreur, « Mauvaise adresse ? Recommencer » permet de vous réinscrire. Les adresses temporaires (yopmail, mailinator…) ne sont pas acceptées." },
+      { q: "Pourquoi confirmer mon adresse e-mail ?", r: "Pour que les crédits offerts aillent à de vraies personnes : sans confirmation, des robots pourraient créer des comptes à la chaîne et épuiser la capacité de dessin de la plateforme. Vos crédits offerts arrivent dès la confirmation." },
+      { q: "J'ai oublié mon mot de passe.", r: "Sur la page de connexion, cliquez sur « Mot de passe oublié ? » et indiquez votre adresse : vous recevez un code par e-mail pour choisir un nouveau mot de passe. Vos autres appareils sont alors déconnectés." },
+      { q: "Comment donner mon avis ?", r: "À la fin d'un épisode, ou à tout moment depuis « Donner mon avis » en bas de page. Il est publié sur la page d'accueil après une rapide relecture, avec le nom que vous choisissez, jamais votre adresse e-mail. Vous pouvez le modifier ou le retirer quand vous voulez." },
       { q: "Comment supprimer mon compte ?", r: "Écrivez-nous depuis l'adresse de votre compte ; vos séries, personnages et photos seront supprimés." },
     ],
   },

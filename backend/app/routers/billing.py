@@ -10,7 +10,7 @@ from app.db import get_session
 from app.models import PaymentIntent, User
 from app.plans import PACK_CREDITS, PACK_PRICE_USD_CENTS, PACK_PRICE_XAF, PLANS
 from app.schemas import CheckoutIn
-from app.security import current_user
+from app.security import verified_user
 
 router = APIRouter(tags=["facturation"])
 
@@ -31,7 +31,7 @@ async def plans():
 
 
 @router.get("/billing/operators")
-async def operators(user: User = Depends(current_user)):
+async def operators(user: User = Depends(verified_user)):
     """Opérateurs mobile money proposés par TrustChange (code à renvoyer dans `operator` au paiement)."""
     require_trust()
     try:
@@ -41,7 +41,7 @@ async def operators(user: User = Depends(current_user)):
 
 
 @router.post("/billing/checkout", status_code=202)
-async def checkout(body: CheckoutIn, user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
+async def checkout(body: CheckoutIn, user: User = Depends(verified_user), session: AsyncSession = Depends(get_session)):
     """Démarre un paiement. Mobile money : le client valide sur son téléphone, puis le front
     interroge GET /billing/payments/{reference} jusqu'à `paid` ou `failed`."""
     if body.product == "don" and (body.provider != "trust" or not body.amount):
@@ -62,7 +62,7 @@ async def checkout(body: CheckoutIn, user: User = Depends(current_user), session
 
 
 @router.get("/billing/payments/{reference}")
-async def payment_status(reference: str, user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
+async def payment_status(reference: str, user: User = Depends(verified_user), session: AsyncSession = Depends(get_session)):
     """État d'un paiement. Tant qu'il est en attente, on relit la transaction chez TrustChange :
     le plan s'active même si la notification s'est perdue."""
     intent = await session.get(PaymentIntent, reference)

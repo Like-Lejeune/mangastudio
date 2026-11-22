@@ -121,3 +121,13 @@ async def test_full_flow(client, monkeypatch):
     assert (await client.get("/me", headers=h)).json()["credits"] == before
     async with SessionLocal() as s:
         assert (await s.get(Episode, ep["id"])).script is None
+
+
+async def test_style_afro_accepte(client):
+    r = await client.post("/auth/register", json={"email": "afro@test.cm", "display_name": "Kofi", "password": "motdepasse"})
+    h = {"Authorization": f"Bearer {r.json()['token']}"}
+    r = await client.post("/series", json={"premise": "Une griotte de Bafoussam voit les esprits du marché.", "style": "afro"}, headers=h)
+    assert r.status_code == 201
+    from app.pipeline.prompts import art
+    assert "afro-manga" in art("afro") and "wax" in art("afro")
+    assert (await client.post("/series", json={"premise": "Une histoire quelconque ici.", "style": "inconnu"}, headers=h)).status_code == 422

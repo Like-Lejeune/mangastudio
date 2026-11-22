@@ -13,7 +13,7 @@ from app.config import get_settings
 from app.db import get_session
 from app.models import Character, Series, User
 from app.schemas import CharacterIn, SeriesIn
-from app.security import current_user
+from app.security import verified_user
 from app.services import current_plan
 
 router = APIRouter(tags=["séries"])
@@ -79,7 +79,7 @@ def series_out(s: Series, detail: bool = False) -> dict:
 
 
 @router.post("/series", status_code=201)
-async def create_series(body: SeriesIn, user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
+async def create_series(body: SeriesIn, user: User = Depends(verified_user), session: AsyncSession = Depends(get_session)):
     plan, _ = await current_plan(session, user.id)
     if body.palette == "color" and not plan.color:
         raise HTTPException(403, {"code": "plan_limit", "message": f"La couleur n'est pas incluse dans le plan {plan.name}."})
@@ -91,18 +91,18 @@ async def create_series(body: SeriesIn, user: User = Depends(current_user), sess
 
 
 @router.get("/series")
-async def list_series(user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
+async def list_series(user: User = Depends(verified_user), session: AsyncSession = Depends(get_session)):
     rows = (await session.execute(select(Series).where(Series.owner_id == user.id).order_by(Series.created_at.desc()))).scalars()
     return [series_out(s) for s in rows]
 
 
 @router.get("/series/{series_id}")
-async def get_series(series_id: str, user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
+async def get_series(series_id: str, user: User = Depends(verified_user), session: AsyncSession = Depends(get_session)):
     return series_out(await owned_series(session, user, series_id), detail=True)
 
 
 @router.post("/series/{series_id}/characters", status_code=201)
-async def add_character(series_id: str, body: CharacterIn, user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
+async def add_character(series_id: str, body: CharacterIn, user: User = Depends(verified_user), session: AsyncSession = Depends(get_session)):
     """Ajoute un personnage à la bibliothèque de la série. Sa fiche est dessinée au premier épisode où il joue."""
     series = await owned_series(session, user, series_id)
     await refuse_blocked(session, user, f"{body.name} {body.role} {body.description}")

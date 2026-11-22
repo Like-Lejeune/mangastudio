@@ -17,6 +17,7 @@ export function Footer() {
           <p className="label-caps mb-2 text-encre">Plateforme</p>
           <ul>
             <li><Link to="/" hash="tarifs" className={lien}>Tarifs</Link></li>
+            <li><Link to="/styles" className={lien}>Les styles</Link></li>
             <li><Link to="/abonnements" className={lien}>Abonnements</Link></li>
             <li><Link to="/inscription" className={lien}>Créer un compte</Link></li>
           </ul>
@@ -26,6 +27,7 @@ export function Footer() {
           <ul>
             <li><Link to="/faq" className={lien}>Questions fréquentes</Link></li>
             <li><Link to="/contact" className={lien}>Nous contacter</Link></li>
+            <li><Link to="/mon-avis" className={lien}>Donner mon avis</Link></li>
             <li><Link to="/soutenir" className={`${lien} font-bold text-vermillon`}>Nous soutenir</Link></li>
           </ul>
         </nav>

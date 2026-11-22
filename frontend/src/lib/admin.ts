@@ -15,12 +15,13 @@ export type Overview = {
   daily: Daily[];
   problems: { id: string; number: number; title: string; status: string; error: string; series_title: string; owner_email: string; created_at: string }[];
   moderation_events: ModerationEvent[];
+  testimonials_pending: number;
   budget: { limit_usd: number; spent_today_usd: number; ratio: number | null };
   generated_at: string;
 };
 
 export type AdminUser = {
-  id: string; email: string; display_name: string; is_admin: boolean; is_active: boolean; plan: string; plan_name: string;
+  id: string; email: string; display_name: string; is_admin: boolean; is_active: boolean; email_verified: boolean; plan: string; plan_name: string;
   credits: number; episodes: number; last_episode_at: string | null; created_at: string;
 };
 export type ModerationEvent = { id: string; checkpoint: string; action: string; rule: string; excerpt: string; user_email?: string | null; episode_id?: string | null; created_at: string };
@@ -30,7 +31,7 @@ export type AdminEpisode = {
   owner_email: string; owner_id: string; created_at: string; credits: number; cost_usd: number; images: number; tokens: number;
 };
 export type UserDetail = {
-  id: string; email: string; display_name: string; is_admin: boolean; is_active: boolean; created_at: string;
+  id: string; email: string; display_name: string; is_admin: boolean; is_active: boolean; email_verified: boolean; created_at: string;
   plan: { id: string; name: string };
   subscription: { plan: string; status: string; provider: string; period_end: string } | null;
   credits: { total: number; monthly: number; pack: number };
@@ -61,6 +62,6 @@ export const PLAN_LABEL: Record<string, string> = { free: "Découverte", creator
 export const KIND_LABEL: Record<string, string> = { grant: "Attribution", reserve: "Réserve", refund: "Remboursement", expire: "Retrait ou expiration" };
 export const CHECKPOINT_LABEL: Record<string, string> = { input: "Saisie", script: "Scénario", image: "Image" };
 export const ACTION_LABEL: Record<string, string> = {
-  credits: "Crédits", plan: "Plan", suspend: "Suspension", reactivate: "Réactivation", role: "Rôle", term: "Mot bloqué", scene_rule: "Scène interdite", budget_alert: "Alerte budget IA",
+  credits: "Crédits", plan: "Plan", suspend: "Suspension", reactivate: "Réactivation", role: "Rôle", term: "Mot bloqué", scene_rule: "Scène interdite", budget_alert: "Alerte budget IA", testimonial: "Avis", verify_email: "Adresse confirmée",
 };
 export const INTENT_LABEL: Record<string, string> = { pending: "En attente", paid: "Payé", failed: "Échoué" };
