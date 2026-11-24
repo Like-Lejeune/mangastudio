@@ -46,6 +46,11 @@ class User(Base):
     reset_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     # Augmenté à chaque changement de mot de passe : les sessions ouvertes avant sont fermées.
     session_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Parrainage et crédits gratuits
+    referral_code: Mapped[str | None] = mapped_column(String(12), unique=True, nullable=True)
+    referred_by_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    signup_ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    last_refill_week: Mapped[str | None] = mapped_column(String(8), nullable=True)   # ex. 2026-W48
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
@@ -266,3 +271,28 @@ class PdfDownload(Base):
     episode_id: Mapped[str] = mapped_column(String(32))
     watermark: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+
+
+class Referral(Base):
+    """Un filleul. Les récompenses sont datées une à une : chacune n'est versée qu'une fois."""
+    __tablename__ = "referrals"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    referrer_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    referee_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+    # pending : en attente du 1er épisode · qualified : parrain récompensé · flagged : à vérifier · cancelled
+    status: Mapped[str] = mapped_column(String(10), default="pending", index=True)
+    flag_reason: Mapped[str] = mapped_column(String(120), default="")
+    invitee_rewarded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    referrer_rewarded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    purchase_rewarded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class UserMission(Base):
+    """Mission accomplie (et payée) une seule fois par compte."""
+    __tablename__ = "user_missions"
+    __table_args__ = (UniqueConstraint("user_id", "mission"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    mission: Mapped[str] = mapped_column(String(30))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

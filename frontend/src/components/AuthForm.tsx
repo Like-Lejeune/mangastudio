@@ -2,6 +2,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, tokenStore } from "@/lib/api";
+import { codeRetenu, oublierCode } from "@/lib/parrainage";
 import { Button, Card, ErrorNote, Field, Input } from "./ink";
 
 export function AuthForm({ mode }: { mode: "login" | "register" }) {
@@ -10,13 +11,15 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const [password, setPassword] = useState("");
   const nav = useNavigate();
   const qc = useQueryClient();
+  const [parrain] = useState(() => (mode === "register" ? codeRetenu() : null));
   const m = useMutation({
     mutationFn: () =>
       api<{ token: string; email_verified?: boolean }>(mode === "login" ? "/auth/login" : "/auth/register", {
-        body: mode === "login" ? { email, password } : { email, display_name: name, password },
+        body: mode === "login" ? { email, password } : { email, display_name: name, password, ...(parrain ? { ref: parrain } : {}) },
       }),
     onSuccess: ({ token, email_verified }) => {
       qc.clear(); tokenStore.set(token);
+      if (mode === "register") oublierCode();
       nav({ to: email_verified === false ? "/verifier" : "/", replace: true });
     },
   });
@@ -26,6 +29,11 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       <Card featured className="w-full max-w-[420px]">
         <h1 className="font-display text-[32px] leading-[38px]">{reg ? "Créer un compte" : "Connexion"}</h1>
         <p className="mt-2 text-encre-douce">{reg ? "Un code de confirmation vous sera envoyé par e-mail." : "Heureux de vous revoir au studio."}</p>
+        {reg && parrain && (
+          <p className="mt-4 rounded-[4px] border-2 border-encre bg-soleil px-3 py-2 text-[14px] font-bold">
+            Invité par un ami : +5 crédits offerts en plus, dès la confirmation de votre adresse.
+          </p>
+        )}
         <form className="mt-6 flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); m.mutate(); }}>
           {reg && <Field label="Nom affiché" htmlFor="name"><Input id="name" required maxLength={60} value={name} onChange={(e) => setName(e.target.value)} autoComplete="nickname" /></Field>}
           <Field label="Adresse e-mail" htmlFor="email"><Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" /></Field>

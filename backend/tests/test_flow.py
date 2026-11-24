@@ -22,6 +22,7 @@ async def wait_done(client, headers, episode_id):
 
 
 async def test_full_flow(client, monkeypatch):
+    monkeypatch.setattr("app.growth.MISSIONS", {})   # ce test compte les crédits au plus juste : sans missions
     r = await client.post("/auth/register", json={"email": "a@b.cm", "display_name": "Yves", "password": "motdepasse"})
     h = {"Authorization": f"Bearer {r.json()['token']}"}
     me = (await client.get("/me", headers=h)).json()

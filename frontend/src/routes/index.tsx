@@ -65,6 +65,11 @@ function MesSeries() {
   return (
     <Container>
       <PageTitle sub={me ? `Bonjour ${me.display_name}, voici vos séries.` : undefined}>Mes séries</PageTitle>
+      {!!me?.weekly_refill && (
+        <p role="status" className="mb-6 rounded-[4px] border-2 border-encre bg-soleil px-4 py-3 font-bold">
+          Recharge de la semaine : +{me.weekly_refill} crédits. <Link to="/gagner" className="underline">Gagner plus de crédits</Link>
+        </p>
+      )}
       <div className="grid gap-8 lg:grid-cols-[1fr_380px]">
         <section aria-label="Vos séries">
           {isLoading && <p className="text-encre-douce">Chargement de vos séries…</p>}

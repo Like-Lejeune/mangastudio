@@ -28,6 +28,7 @@ export function Footer() {
             <li><Link to="/faq" className={lien}>Questions fréquentes</Link></li>
             <li><Link to="/contact" className={lien}>Nous contacter</Link></li>
             <li><Link to="/mon-avis" className={lien}>Donner mon avis</Link></li>
+            <li><Link to="/gagner" className={lien}>Gagner des crédits</Link></li>
             <li><Link to="/soutenir" className={`${lien} font-bold text-vermillon`}>Nous soutenir</Link></li>
           </ul>
         </nav>

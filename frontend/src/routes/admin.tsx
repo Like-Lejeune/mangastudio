@@ -15,6 +15,7 @@ const TABS = [
   ["/admin/episodes", "Épisodes", false],
   ["/admin/paiements", "Paiements", false],
   ["/admin/avis", "Avis", false],
+  ["/admin/parrainages", "Parrainages", false],
   ["/admin/moderation", "Modération", false],
   ["/admin/journal", "Journal", false],
 ] as const;

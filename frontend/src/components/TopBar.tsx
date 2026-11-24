@@ -30,7 +30,11 @@ export function TopBar() {
                 <Heart size={18} strokeWidth={2.5} aria-hidden /><span className="hidden sm:inline">Soutenir</span>
               </Link>
               {me && <Pill>Plan {me.plan.name}</Pill>}
-              {me && <Pill tone="soleil"><span className="tabular">{me.credits}</span> crédits</Pill>}
+              {me && (
+                <Link to="/gagner" title="Gagner des crédits" className="rounded-full hover:ring-2 hover:ring-encre">
+                  <Pill tone="soleil"><span className="tabular">{me.credits}</span> crédits <span aria-hidden>＋</span></Pill>
+                </Link>
+              )}
               <button
                 className="inline-flex size-11 items-center justify-center rounded-[4px] hover:bg-papier"
                 aria-label="Se déconnecter"

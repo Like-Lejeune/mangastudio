@@ -78,7 +78,7 @@ export async function api<T>(path: string, opts: { method?: string; body?: unkno
 export type Plan = { id: string; name: string; max_characters: number; max_pages: number; color: boolean; redraw: boolean };
 export type Me = {
   id: string; email: string; is_admin: boolean; email_verified: boolean;
-  display_name: string; credits: number; plan: Plan;
+  display_name: string; credits: number; plan: Plan; weekly_refill?: number;
   subscription?: { status: string; provider: string; period_end: string } | null;
 };
 /** `premise` est l'idée de départ saisie à la création (l'API ne renvoie pas de champ `pitch`). */

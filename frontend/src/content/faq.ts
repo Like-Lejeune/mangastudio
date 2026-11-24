@@ -17,6 +17,7 @@ export const FAQ: { rubrique: string; questions: Question[] }[] = [
     rubrique: "Crédits et paiement",
     questions: [
       { q: "À quoi correspond un crédit ?", r: "Un crédit = une image livrée : une page, une fiche de personnage ou une couverture. Le nombre de crédits nécessaires s'affiche avant de lancer l'épisode." },
+      { q: "Comment gagner des crédits gratuits ?", r: "Trois façons, détaillées sur la page « Gagner des crédits » : inviter des amis avec votre lien (ils reçoivent 5 crédits, vous 10 quand ils terminent leur premier épisode, puis 25 à leur premier achat), accomplir les missions (premier épisode, premier partage, avis publié), et la recharge de la semaine : avec le plan gratuit, votre solde remonte à 5 crédits à votre première visite de la semaine." },
       { q: "Que se passe-t-il si un épisode s'interrompt ?", r: "Les crédits sont réservés au lancement, puis seules les images réellement livrées sont débitées. Si un épisode s'arrête en route, les crédits des images non livrées vous sont rendus, et vous pouvez reprendre l'épisode." },
       { q: "Comment payer ?", r: "Par mobile money, MTN Mobile Money ou Orange Money. Vous choisissez l'opérateur, indiquez votre numéro et validez le paiement sur votre téléphone. Le plan s'active dès que le paiement est confirmé." },
       { q: "L'abonnement se renouvelle-t-il tout seul ?", r: "Non. Un plan payé est actif 30 jours, sans prélèvement automatique. Vous le renouvelez quand vous le souhaitez depuis la page Abonnements." },

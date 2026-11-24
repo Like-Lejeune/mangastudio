@@ -15,6 +15,7 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as ConnexionRouteImport } from './routes/connexion'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as FaqRouteImport } from './routes/faq'
+import { Route as GagnerRouteImport } from './routes/gagner'
 import { Route as InscriptionRouteImport } from './routes/inscription'
 import { Route as MonAvisRouteImport } from './routes/mon-avis'
 import { Route as MotDePasseOublieRouteImport } from './routes/mot-de-passe-oublie'
@@ -26,6 +27,7 @@ import { Route as AdminAvisRouteImport } from './routes/admin/avis'
 import { Route as AdminJournalRouteImport } from './routes/admin/journal'
 import { Route as AdminModerationRouteImport } from './routes/admin/moderation'
 import { Route as AdminPaiementsRouteImport } from './routes/admin/paiements'
+import { Route as AdminParrainagesRouteImport } from './routes/admin/parrainages'
 import { Route as EpisodesIdRouteImport } from './routes/episodes.$id'
 import { Route as SeriesIdRouteImport } from './routes/series.$id'
 import { Route as AdminEpisodesIndexRouteImport } from './routes/admin/episodes.index'
@@ -61,6 +63,11 @@ const ContactRoute = ContactRouteImport.update({
 const FaqRoute = FaqRouteImport.update({
   id: '/faq',
   path: '/faq',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GagnerRoute = GagnerRouteImport.update({
+  id: '/gagner',
+  path: '/gagner',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InscriptionRoute = InscriptionRouteImport.update({
@@ -118,6 +125,11 @@ const AdminPaiementsRoute = AdminPaiementsRouteImport.update({
   path: '/paiements',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminParrainagesRoute = AdminParrainagesRouteImport.update({
+  id: '/parrainages',
+  path: '/parrainages',
+  getParentRoute: () => AdminRoute,
+} as any)
 const EpisodesIdRoute = EpisodesIdRouteImport.update({
   id: '/episodes/$id',
   path: '/episodes/$id',
@@ -156,6 +168,7 @@ export interface FileRoutesByFullPath {
   '/connexion': typeof ConnexionRoute
   '/contact': typeof ContactRoute
   '/faq': typeof FaqRoute
+  '/gagner': typeof GagnerRoute
   '/inscription': typeof InscriptionRoute
   '/mon-avis': typeof MonAvisRoute
   '/mot-de-passe-oublie': typeof MotDePasseOublieRoute
@@ -166,6 +179,7 @@ export interface FileRoutesByFullPath {
   '/admin/journal': typeof AdminJournalRoute
   '/admin/moderation': typeof AdminModerationRoute
   '/admin/paiements': typeof AdminPaiementsRoute
+  '/admin/parrainages': typeof AdminParrainagesRoute
   '/episodes/$id': typeof EpisodesIdRoute
   '/series/$id': typeof SeriesIdRoute
   '/admin/': typeof AdminIndexRoute
@@ -180,6 +194,7 @@ export interface FileRoutesByTo {
   '/connexion': typeof ConnexionRoute
   '/contact': typeof ContactRoute
   '/faq': typeof FaqRoute
+  '/gagner': typeof GagnerRoute
   '/inscription': typeof InscriptionRoute
   '/mon-avis': typeof MonAvisRoute
   '/mot-de-passe-oublie': typeof MotDePasseOublieRoute
@@ -190,6 +205,7 @@ export interface FileRoutesByTo {
   '/admin/journal': typeof AdminJournalRoute
   '/admin/moderation': typeof AdminModerationRoute
   '/admin/paiements': typeof AdminPaiementsRoute
+  '/admin/parrainages': typeof AdminParrainagesRoute
   '/episodes/$id': typeof EpisodesIdRoute
   '/series/$id': typeof SeriesIdRoute
   '/admin': typeof AdminIndexRoute
@@ -206,6 +222,7 @@ export interface FileRoutesById {
   '/connexion': typeof ConnexionRoute
   '/contact': typeof ContactRoute
   '/faq': typeof FaqRoute
+  '/gagner': typeof GagnerRoute
   '/inscription': typeof InscriptionRoute
   '/mon-avis': typeof MonAvisRoute
   '/mot-de-passe-oublie': typeof MotDePasseOublieRoute
@@ -216,6 +233,7 @@ export interface FileRoutesById {
   '/admin/journal': typeof AdminJournalRoute
   '/admin/moderation': typeof AdminModerationRoute
   '/admin/paiements': typeof AdminPaiementsRoute
+  '/admin/parrainages': typeof AdminParrainagesRoute
   '/episodes/$id': typeof EpisodesIdRoute
   '/series/$id': typeof SeriesIdRoute
   '/admin/': typeof AdminIndexRoute
@@ -233,6 +251,7 @@ export interface FileRouteTypes {
     | '/connexion'
     | '/contact'
     | '/faq'
+    | '/gagner'
     | '/inscription'
     | '/mon-avis'
     | '/mot-de-passe-oublie'
@@ -243,6 +262,7 @@ export interface FileRouteTypes {
     | '/admin/journal'
     | '/admin/moderation'
     | '/admin/paiements'
+    | '/admin/parrainages'
     | '/episodes/$id'
     | '/series/$id'
     | '/admin/'
@@ -257,6 +277,7 @@ export interface FileRouteTypes {
     | '/connexion'
     | '/contact'
     | '/faq'
+    | '/gagner'
     | '/inscription'
     | '/mon-avis'
     | '/mot-de-passe-oublie'
@@ -267,6 +288,7 @@ export interface FileRouteTypes {
     | '/admin/journal'
     | '/admin/moderation'
     | '/admin/paiements'
+    | '/admin/parrainages'
     | '/episodes/$id'
     | '/series/$id'
     | '/admin'
@@ -282,6 +304,7 @@ export interface FileRouteTypes {
     | '/connexion'
     | '/contact'
     | '/faq'
+    | '/gagner'
     | '/inscription'
     | '/mon-avis'
     | '/mot-de-passe-oublie'
@@ -292,6 +315,7 @@ export interface FileRouteTypes {
     | '/admin/journal'
     | '/admin/moderation'
     | '/admin/paiements'
+    | '/admin/parrainages'
     | '/episodes/$id'
     | '/series/$id'
     | '/admin/'
@@ -308,6 +332,7 @@ export interface RootRouteChildren {
   ConnexionRoute: typeof ConnexionRoute
   ContactRoute: typeof ContactRoute
   FaqRoute: typeof FaqRoute
+  GagnerRoute: typeof GagnerRoute
   InscriptionRoute: typeof InscriptionRoute
   MonAvisRoute: typeof MonAvisRoute
   MotDePasseOublieRoute: typeof MotDePasseOublieRoute
@@ -360,6 +385,13 @@ declare module '@tanstack/react-router' {
       path: '/faq'
       fullPath: '/faq'
       preLoaderRoute: typeof FaqRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gagner': {
+      id: '/gagner'
+      path: '/gagner'
+      fullPath: '/gagner'
+      preLoaderRoute: typeof GagnerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/inscription': {
@@ -439,6 +471,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminPaiementsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/parrainages': {
+      id: '/admin/parrainages'
+      path: '/parrainages'
+      fullPath: '/admin/parrainages'
+      preLoaderRoute: typeof AdminParrainagesRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/episodes/$id': {
       id: '/episodes/$id'
       path: '/episodes/$id'
@@ -489,6 +528,7 @@ interface AdminRouteChildren {
   AdminJournalRoute: typeof AdminJournalRoute
   AdminModerationRoute: typeof AdminModerationRoute
   AdminPaiementsRoute: typeof AdminPaiementsRoute
+  AdminParrainagesRoute: typeof AdminParrainagesRoute
   AdminIndexRoute: typeof AdminIndexRoute
   AdminEpisodesIdRoute: typeof AdminEpisodesIdRoute
   AdminUtilisateursIdRoute: typeof AdminUtilisateursIdRoute
@@ -501,6 +541,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminJournalRoute: AdminJournalRoute,
   AdminModerationRoute: AdminModerationRoute,
   AdminPaiementsRoute: AdminPaiementsRoute,
+  AdminParrainagesRoute: AdminParrainagesRoute,
   AdminIndexRoute: AdminIndexRoute,
   AdminEpisodesIdRoute: AdminEpisodesIdRoute,
   AdminUtilisateursIdRoute: AdminUtilisateursIdRoute,
@@ -517,6 +558,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConnexionRoute: ConnexionRoute,
   ContactRoute: ContactRoute,
   FaqRoute: FaqRoute,
+  GagnerRoute: GagnerRoute,
   InscriptionRoute: InscriptionRoute,
   MonAvisRoute: MonAvisRoute,
   MotDePasseOublieRoute: MotDePasseOublieRoute,

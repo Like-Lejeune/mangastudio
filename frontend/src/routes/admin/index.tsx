@@ -43,6 +43,14 @@ function OverviewPage() {
           sub={<>{num(o.payments.pending_30d)} en attente · {num(o.payments.failed_30d)} échoués</>} />
       </div>
 
+      {o.free_credits && (
+        <Section title="Crédits offerts (30 j)" aside={<span className="text-[14px]"><span className="tabular font-bold">{num(o.free_credits.total)}</span> crédits{o.ai.cost_per_credit_usd !== null && <> · environ {usd(o.free_credits.total * o.ai.cost_per_credit_usd)} de coût IA s'ils sont tous utilisés</>}</span>}>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {Object.entries(o.free_credits.by_source).map(([source, n]) => <Stat key={source} label={source} value={num(n)} />)}
+          </div>
+        </Section>
+      )}
+
       <Section title="Les 30 derniers jours">
         <div className="grid gap-4 md:grid-cols-2">
           <DailyBars title="Inscriptions" data={daily("signups")} format={num} />

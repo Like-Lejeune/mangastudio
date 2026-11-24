@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import growth
 from app.db import get_session
 from app.models import Testimonial, User
 from app.routers.admin_ops import PAGE_SIZE, iso, log, page_of
@@ -90,5 +91,7 @@ async def admin_review(testimonial_id: str, body: TestimonialStatusIn, admin: Us
     t.reviewed_at = datetime.now(timezone.utc) if body.status != "pending" else None
     label = {"approved": "publié", "rejected": "refusé", "pending": "remis en attente"}[body.status]
     log(session, admin, "testimonial", "user", t.user_id, f"Avis {label} : « {t.text[:60]}… »")
+    if body.status == "approved":
+        await growth.mission(session, t.user_id, "testimonial")
     await session.commit()
     return full(t)

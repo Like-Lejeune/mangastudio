@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import usage
+from app import growth, usage
 from app.models import Payment, Subscription, User, now
 from app.plans import PACKS, PERIOD_DAYS, PLANS
 from app.services import aware
@@ -71,6 +71,8 @@ async def apply_event(session: AsyncSession, event: PaymentEvent) -> bool:
         sub.external_id = event.subscription_id or sub.external_id
         sub.period_end = start + timedelta(days=PERIOD_DAYS)
         await usage.renew_monthly(session, event.user_id, plan.credits, f"plan {plan.name}")
+    if event.product != "don":
+        await growth.on_purchase(session, event.user_id)
     try:
         await session.commit()
     except IntegrityError:       # même webhook reçu deux fois en même temps : le second s'arrête ici

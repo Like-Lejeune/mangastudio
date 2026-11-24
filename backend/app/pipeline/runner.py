@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app import budget, moderation, storage, usage
+from app import budget, growth, moderation, storage, usage
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import Character, Episode, EpisodeCharacter, Page, Series, UsageEvent
@@ -93,6 +93,13 @@ async def run_episode(episode_id: str, studio: Studio | None = None) -> None:
         episode.status, episode.error = status, error
         await usage.settle(session, user_id, episode_id, await delivered_images(session, episode_id))
         await session.commit()
+        if status == "done":
+            try:
+                await growth.on_episode_done(session, user_id)   # mission et récompense du parrain
+                await session.commit()
+            except Exception:  # noqa: BLE001  (une récompense ratée ne doit pas toucher l'épisode)
+                await session.rollback()
+                log.exception("récompenses de fin d'épisode")
         try:
             await budget.alert_if_needed(session)   # alerte dès qu'un épisode fait franchir un seuil
         except Exception:  # noqa: BLE001  (une alerte ratée ne doit pas toucher l'épisode)

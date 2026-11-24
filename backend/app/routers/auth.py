@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import mailer, ratelimit, usage
+from app import growth, mailer, ratelimit, usage
 from app.config import get_settings
 from app.db import get_session
 from app.disposable import is_disposable
@@ -36,6 +36,7 @@ async def welcome_credits(session: AsyncSession, user: User) -> None:
     deja = (await session.execute(select(CreditLedger.id).where(CreditLedger.user_id == user.id, CreditLedger.note == "bienvenue"))).first()
     if not deja:
         await usage.grant(session, user.id, PLANS["free"].credits, "pack", "bienvenue")
+        await growth.on_verified(session, user)
 
 
 async def send_new_code(session: AsyncSession, user: User) -> None:
@@ -72,6 +73,8 @@ async def register(body: Register, request: Request, session: AsyncSession = Dep
                 is_admin=email in settings.admin_email_set, email_verified=not settings.email_verification)
     session.add(user)
     await session.flush()
+    user.referral_code = await growth.new_code(session)
+    await growth.attach(session, user, body.ref, ratelimit.client_ip(request))
     if user.email_verified:
         await welcome_credits(session, user)
         await session.commit()
@@ -143,11 +146,14 @@ async def login(body: Login, request: Request, session: AsyncSession = Depends(g
 
 @router.get("/me")
 async def me(user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
+    refill = await growth.weekly_refill(session, user)     # première visite de la semaine
+    await session.commit()
     plan, sub = await current_plan(session, user.id)
     return {
         "id": user.id, "email": user.email, "display_name": user.display_name, "is_admin": user.is_admin,
         "email_verified": user.email_verified,
         "credits": await usage.balance(session, user.id),
+        "weekly_refill": refill,
         "plan": {"id": plan.id, "name": plan.name, "max_characters": plan.max_characters, "max_pages": plan.max_pages,
                  "color": plan.color, "redraw": plan.redraw},
         "subscription": {"status": sub.status, "provider": sub.provider, "period_end": sub.period_end.isoformat()} if sub else None,

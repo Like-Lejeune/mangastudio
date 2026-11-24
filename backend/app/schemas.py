@@ -8,6 +8,7 @@ class Register(BaseModel):
     email: str = Field(pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", max_length=255)
     display_name: str = Field(min_length=1, max_length=60)
     password: str = Field(min_length=8, max_length=200)
+    ref: str | None = Field(default=None, max_length=12)   # code de parrainage
 
 
 class VerifyIn(BaseModel):

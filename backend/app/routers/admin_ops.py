@@ -71,6 +71,21 @@ async def cost_by_episode(session: AsyncSession, episode_ids: list[str]) -> dict
 
 # ─── Vue d'ensemble ───────────────────────────────────────────────────────────
 
+FREE_SOURCES = {"bienvenue": "Bienvenue", "parrainage": "Parrainage", "mission": "Missions", "recharge": "Recharge hebdomadaire"}
+
+
+async def free_credits(session: AsyncSession, since) -> dict:
+    """Crédits offerts sur la période, par source (bienvenue, parrainage, missions, recharge)."""
+    rows = (await session.execute(select(CreditLedger.note, func.sum(CreditLedger.delta)).where(
+        CreditLedger.kind == "grant", CreditLedger.created_at >= since).group_by(CreditLedger.note))).all()
+    out = {label: 0 for label in FREE_SOURCES.values()}
+    for note, total in rows:
+        for prefix, label in FREE_SOURCES.items():
+            if (note or "").startswith(prefix):
+                out[label] += int(total or 0)
+    return {"by_source": out, "total": sum(out.values())}
+
+
 @router.get("/overview")
 async def overview(session: AsyncSession = Depends(get_session)):
     """Les chiffres clés de la plateforme et leur évolution jour par jour sur 30 jours."""
@@ -146,6 +161,7 @@ async def overview(session: AsyncSession = Depends(get_session)):
         "moderation_events": [{"id": m.id, "checkpoint": m.checkpoint, "action": m.action, "rule": m.rule, "excerpt": m.excerpt,
                                "user_email": em, "created_at": iso(m.created_at)} for m, em in events],
         "budget": await budget.status(session),
+        "free_credits": await free_credits(session, since),
         "testimonials_pending": (await session.execute(select(func.count()).select_from(Testimonial).where(Testimonial.status == "pending"))).scalar_one(),
         "generated_at": t.isoformat(),
     }

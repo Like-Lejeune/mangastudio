@@ -6,6 +6,9 @@ import "@fontsource/jetbrains-mono/latin-500.css";
 import "@fontsource/jetbrains-mono/latin-700.css";
 import "@fontsource/bangers/latin-400.css";
 import "./styles.css";
+import { retenirCodeDepuisUrl } from "@/lib/parrainage";
+
+retenirCodeDepuisUrl();   // lien d'invitation : /?ref=CODE ou /inscription?ref=CODE
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRouter, RouterProvider } from "@tanstack/react-router";

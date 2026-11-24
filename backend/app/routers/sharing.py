@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app import pdf, storage
+from app import growth, pdf, storage
 from app.config import get_settings
 from app.db import get_session
 from app.models import Episode, PdfDownload, User
@@ -47,6 +47,7 @@ async def set_share(episode_id: str, body: ShareIn, user: User = Depends(verifie
             raise HTTPException(409, "Seul un épisode terminé peut être partagé.")
         if not e.share_token:
             e.share_token = secrets.token_urlsafe(16)[:22]
+            await growth.mission(session, user.id, "first_share")
     else:
         e.share_token = None
     await session.commit()
@@ -89,6 +90,9 @@ async def read_shared(token: str, session: AsyncSession = Depends(get_session)):
                 f'<p><a class="cta" href="{inscription}">Créer mon propre manga</a></p></main>')
         return HTMLResponse(_page_html("Chapitre introuvable — MangaStudio", body), status_code=404)
     owner = await session.get(User, e.series.owner_id)
+    if owner:      # le bouton d'inscription porte le code de parrainage de l'auteur
+        inscription = f"{inscription}?ref={await growth.ensure_code(session, owner)}"
+        await session.commit()
     serie = html.escape(e.series.title or "Manga")
     titre = f"{serie} — Épisode {e.number}" + (f" : {html.escape(e.title)}" if e.title else "")
     auteur = html.escape(owner.display_name) if owner else "un auteur"
@@ -156,7 +160,7 @@ async def download_pdf(episode_id: str, user: User = Depends(verified_user), ses
             images.append(None)
     titre = f"{e.series.title or 'Manga'} — Épisode {e.number}"
     data = await asyncio.to_thread(pdf.build, images, watermark=quota["watermark"], title=titre,
-                                   mention=f"Créé avec MangaStudio · {app_url().split('://')[-1]}")
+                                   mention=f"Créé avec MangaStudio · {app_url().split('://')[-1]} · code {await growth.ensure_code(session, user)}")
     session.add(PdfDownload(user_id=user.id, episode_id=e.id, watermark=quota["watermark"]))
     await session.commit()
     nom = f"{e.series.title or 'manga'} - episode {e.number}.pdf"

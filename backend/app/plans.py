@@ -48,3 +48,16 @@ PERIOD_DAYS = 30
 
 def get_plan(plan_id: str | None) -> Plan:
     return PLANS.get(plan_id or "free", PLANS["free"])
+
+
+# ---------- Crédits gratuits ----------
+REFERRAL_INVITEE = 5        # l'invité, à la confirmation de son adresse
+REFERRAL_REFERRER = 10      # le parrain, quand l'invité termine son 1er épisode
+REFERRAL_PURCHASE = 25      # le parrain, au 1er achat de son filleul
+REFERRAL_MAX = 20           # parrainages récompensés au plus par compte
+WEEKLY_REFILL = 5           # chaque semaine, un compte gratuit actif remonte à ce solde (sans cumul)
+MISSIONS = {                # mission -> (crédits, libellé)
+    "first_episode": (3, "Terminer votre premier épisode"),
+    "first_share": (2, "Partager un chapitre par lien"),
+    "testimonial": (2, "Donner un avis publié sur l'accueil"),
+}
