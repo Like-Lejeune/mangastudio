@@ -20,6 +20,7 @@ from app.models import (
     ModerationEvent,
     Payment,
     PaymentIntent,
+    Publication,
     Series,
     Subscription,
     Testimonial,
@@ -28,7 +29,7 @@ from app.models import (
     now,
 )
 from app.plans import PLANS
-from app.routers.episodes import episode_out
+from app.routers.episodes import abandon_episode, episode_out
 from app.schemas import AdminCreditsIn, AdminPlanIn, AdminRoleIn, AdminStatusIn
 from app.security import admin_user
 from app.services import aware, current_plan
@@ -162,6 +163,7 @@ async def overview(session: AsyncSession = Depends(get_session)):
                                "user_email": em, "created_at": iso(m.created_at)} for m, em in events],
         "budget": await budget.status(session),
         "free_credits": await free_credits(session, since),
+        "publications_pending": (await session.execute(select(func.count()).select_from(Publication).where(Publication.status == "pending"))).scalar_one(),
         "testimonials_pending": (await session.execute(select(func.count()).select_from(Testimonial).where(Testimonial.status == "pending"))).scalar_one(),
         "generated_at": t.isoformat(),
     }
@@ -377,6 +379,18 @@ async def episode_detail(episode_id: str, session: AsyncSession = Depends(get_se
             "cost_usd": sum((c or 0) for *_, c in cost) / 1e6,
             "moderation_events": [{"id": m.id, "checkpoint": m.checkpoint, "action": m.action, "rule": m.rule, "excerpt": m.excerpt,
                                    "created_at": iso(m.created_at)} for m in mods]}
+
+
+@router.post("/episodes/{episode_id}/abandon")
+async def admin_abandon(episode_id: str, admin: User = Depends(admin_user), session: AsyncSession = Depends(get_session)):
+    """Débloque un auteur : l'épisode interrompu ou refusé est abandonné, la réserve restante lui est rendue."""
+    e = (await session.execute(select(Episode).where(Episode.id == episode_id).options(selectinload(Episode.series)))).scalar_one_or_none()
+    if not e:
+        raise HTTPException(404, "Épisode introuvable.")
+    await abandon_episode(session, e)
+    log(session, admin, "episode_abandon", "episode", e.id, f"Épisode n° {e.number} de « {e.series.title} » abandonné pour débloquer l'auteur")
+    await session.commit()
+    return {"id": e.id, "status": e.status}
 
 
 # ─── Paiements ────────────────────────────────────────────────────────────────

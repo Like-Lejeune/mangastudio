@@ -19,6 +19,7 @@ import { Route as GagnerRouteImport } from './routes/gagner'
 import { Route as InscriptionRouteImport } from './routes/inscription'
 import { Route as MonAvisRouteImport } from './routes/mon-avis'
 import { Route as MotDePasseOublieRouteImport } from './routes/mot-de-passe-oublie'
+import { Route as ReglesPublicationRouteImport } from './routes/regles-publication'
 import { Route as SoutenirRouteImport } from './routes/soutenir'
 import { Route as StylesRouteImport } from './routes/styles'
 import { Route as VerifierRouteImport } from './routes/verifier'
@@ -28,7 +29,10 @@ import { Route as AdminJournalRouteImport } from './routes/admin/journal'
 import { Route as AdminModerationRouteImport } from './routes/admin/moderation'
 import { Route as AdminPaiementsRouteImport } from './routes/admin/paiements'
 import { Route as AdminParrainagesRouteImport } from './routes/admin/parrainages'
+import { Route as AdminPublicationsRouteImport } from './routes/admin/publications'
 import { Route as EpisodesIdRouteImport } from './routes/episodes.$id'
+import { Route as GalerieIndexRouteImport } from './routes/galerie.index'
+import { Route as GalerieIdRouteImport } from './routes/galerie.$id'
 import { Route as SeriesIdRouteImport } from './routes/series.$id'
 import { Route as AdminEpisodesIndexRouteImport } from './routes/admin/episodes.index'
 import { Route as AdminEpisodesIdRouteImport } from './routes/admin/episodes.$id'
@@ -85,6 +89,11 @@ const MotDePasseOublieRoute = MotDePasseOublieRouteImport.update({
   path: '/mot-de-passe-oublie',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReglesPublicationRoute = ReglesPublicationRouteImport.update({
+  id: '/regles-publication',
+  path: '/regles-publication',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SoutenirRoute = SoutenirRouteImport.update({
   id: '/soutenir',
   path: '/soutenir',
@@ -130,9 +139,24 @@ const AdminParrainagesRoute = AdminParrainagesRouteImport.update({
   path: '/parrainages',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminPublicationsRoute = AdminPublicationsRouteImport.update({
+  id: '/publications',
+  path: '/publications',
+  getParentRoute: () => AdminRoute,
+} as any)
 const EpisodesIdRoute = EpisodesIdRouteImport.update({
   id: '/episodes/$id',
   path: '/episodes/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GalerieIndexRoute = GalerieIndexRouteImport.update({
+  id: '/galerie/',
+  path: '/galerie/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GalerieIdRoute = GalerieIdRouteImport.update({
+  id: '/galerie/$id',
+  path: '/galerie/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SeriesIdRoute = SeriesIdRouteImport.update({
@@ -172,6 +196,7 @@ export interface FileRoutesByFullPath {
   '/inscription': typeof InscriptionRoute
   '/mon-avis': typeof MonAvisRoute
   '/mot-de-passe-oublie': typeof MotDePasseOublieRoute
+  '/regles-publication': typeof ReglesPublicationRoute
   '/soutenir': typeof SoutenirRoute
   '/styles': typeof StylesRoute
   '/verifier': typeof VerifierRoute
@@ -180,9 +205,12 @@ export interface FileRoutesByFullPath {
   '/admin/moderation': typeof AdminModerationRoute
   '/admin/paiements': typeof AdminPaiementsRoute
   '/admin/parrainages': typeof AdminParrainagesRoute
+  '/admin/publications': typeof AdminPublicationsRoute
   '/episodes/$id': typeof EpisodesIdRoute
+  '/galerie/$id': typeof GalerieIdRoute
   '/series/$id': typeof SeriesIdRoute
   '/admin/': typeof AdminIndexRoute
+  '/galerie/': typeof GalerieIndexRoute
   '/admin/episodes/$id': typeof AdminEpisodesIdRoute
   '/admin/utilisateurs/$id': typeof AdminUtilisateursIdRoute
   '/admin/episodes/': typeof AdminEpisodesIndexRoute
@@ -198,6 +226,7 @@ export interface FileRoutesByTo {
   '/inscription': typeof InscriptionRoute
   '/mon-avis': typeof MonAvisRoute
   '/mot-de-passe-oublie': typeof MotDePasseOublieRoute
+  '/regles-publication': typeof ReglesPublicationRoute
   '/soutenir': typeof SoutenirRoute
   '/styles': typeof StylesRoute
   '/verifier': typeof VerifierRoute
@@ -206,9 +235,12 @@ export interface FileRoutesByTo {
   '/admin/moderation': typeof AdminModerationRoute
   '/admin/paiements': typeof AdminPaiementsRoute
   '/admin/parrainages': typeof AdminParrainagesRoute
+  '/admin/publications': typeof AdminPublicationsRoute
   '/episodes/$id': typeof EpisodesIdRoute
+  '/galerie/$id': typeof GalerieIdRoute
   '/series/$id': typeof SeriesIdRoute
   '/admin': typeof AdminIndexRoute
+  '/galerie': typeof GalerieIndexRoute
   '/admin/episodes/$id': typeof AdminEpisodesIdRoute
   '/admin/utilisateurs/$id': typeof AdminUtilisateursIdRoute
   '/admin/episodes': typeof AdminEpisodesIndexRoute
@@ -226,6 +258,7 @@ export interface FileRoutesById {
   '/inscription': typeof InscriptionRoute
   '/mon-avis': typeof MonAvisRoute
   '/mot-de-passe-oublie': typeof MotDePasseOublieRoute
+  '/regles-publication': typeof ReglesPublicationRoute
   '/soutenir': typeof SoutenirRoute
   '/styles': typeof StylesRoute
   '/verifier': typeof VerifierRoute
@@ -234,9 +267,12 @@ export interface FileRoutesById {
   '/admin/moderation': typeof AdminModerationRoute
   '/admin/paiements': typeof AdminPaiementsRoute
   '/admin/parrainages': typeof AdminParrainagesRoute
+  '/admin/publications': typeof AdminPublicationsRoute
   '/episodes/$id': typeof EpisodesIdRoute
+  '/galerie/$id': typeof GalerieIdRoute
   '/series/$id': typeof SeriesIdRoute
   '/admin/': typeof AdminIndexRoute
+  '/galerie/': typeof GalerieIndexRoute
   '/admin/episodes/$id': typeof AdminEpisodesIdRoute
   '/admin/utilisateurs/$id': typeof AdminUtilisateursIdRoute
   '/admin/episodes/': typeof AdminEpisodesIndexRoute
@@ -255,6 +291,7 @@ export interface FileRouteTypes {
     | '/inscription'
     | '/mon-avis'
     | '/mot-de-passe-oublie'
+    | '/regles-publication'
     | '/soutenir'
     | '/styles'
     | '/verifier'
@@ -263,9 +300,12 @@ export interface FileRouteTypes {
     | '/admin/moderation'
     | '/admin/paiements'
     | '/admin/parrainages'
+    | '/admin/publications'
     | '/episodes/$id'
+    | '/galerie/$id'
     | '/series/$id'
     | '/admin/'
+    | '/galerie/'
     | '/admin/episodes/$id'
     | '/admin/utilisateurs/$id'
     | '/admin/episodes/'
@@ -281,6 +321,7 @@ export interface FileRouteTypes {
     | '/inscription'
     | '/mon-avis'
     | '/mot-de-passe-oublie'
+    | '/regles-publication'
     | '/soutenir'
     | '/styles'
     | '/verifier'
@@ -289,9 +330,12 @@ export interface FileRouteTypes {
     | '/admin/moderation'
     | '/admin/paiements'
     | '/admin/parrainages'
+    | '/admin/publications'
     | '/episodes/$id'
+    | '/galerie/$id'
     | '/series/$id'
     | '/admin'
+    | '/galerie'
     | '/admin/episodes/$id'
     | '/admin/utilisateurs/$id'
     | '/admin/episodes'
@@ -308,6 +352,7 @@ export interface FileRouteTypes {
     | '/inscription'
     | '/mon-avis'
     | '/mot-de-passe-oublie'
+    | '/regles-publication'
     | '/soutenir'
     | '/styles'
     | '/verifier'
@@ -316,9 +361,12 @@ export interface FileRouteTypes {
     | '/admin/moderation'
     | '/admin/paiements'
     | '/admin/parrainages'
+    | '/admin/publications'
     | '/episodes/$id'
+    | '/galerie/$id'
     | '/series/$id'
     | '/admin/'
+    | '/galerie/'
     | '/admin/episodes/$id'
     | '/admin/utilisateurs/$id'
     | '/admin/episodes/'
@@ -336,11 +384,14 @@ export interface RootRouteChildren {
   InscriptionRoute: typeof InscriptionRoute
   MonAvisRoute: typeof MonAvisRoute
   MotDePasseOublieRoute: typeof MotDePasseOublieRoute
+  ReglesPublicationRoute: typeof ReglesPublicationRoute
   SoutenirRoute: typeof SoutenirRoute
   StylesRoute: typeof StylesRoute
   VerifierRoute: typeof VerifierRoute
   EpisodesIdRoute: typeof EpisodesIdRoute
+  GalerieIdRoute: typeof GalerieIdRoute
   SeriesIdRoute: typeof SeriesIdRoute
+  GalerieIndexRoute: typeof GalerieIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -415,6 +466,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MotDePasseOublieRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/regles-publication': {
+      id: '/regles-publication'
+      path: '/regles-publication'
+      fullPath: '/regles-publication'
+      preLoaderRoute: typeof ReglesPublicationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/soutenir': {
       id: '/soutenir'
       path: '/soutenir'
@@ -478,11 +536,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminParrainagesRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/publications': {
+      id: '/admin/publications'
+      path: '/publications'
+      fullPath: '/admin/publications'
+      preLoaderRoute: typeof AdminPublicationsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/episodes/$id': {
       id: '/episodes/$id'
       path: '/episodes/$id'
       fullPath: '/episodes/$id'
       preLoaderRoute: typeof EpisodesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/galerie/': {
+      id: '/galerie/'
+      path: '/galerie'
+      fullPath: '/galerie/'
+      preLoaderRoute: typeof GalerieIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/galerie/$id': {
+      id: '/galerie/$id'
+      path: '/galerie/$id'
+      fullPath: '/galerie/$id'
+      preLoaderRoute: typeof GalerieIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/series/$id': {
@@ -529,6 +608,7 @@ interface AdminRouteChildren {
   AdminModerationRoute: typeof AdminModerationRoute
   AdminPaiementsRoute: typeof AdminPaiementsRoute
   AdminParrainagesRoute: typeof AdminParrainagesRoute
+  AdminPublicationsRoute: typeof AdminPublicationsRoute
   AdminIndexRoute: typeof AdminIndexRoute
   AdminEpisodesIdRoute: typeof AdminEpisodesIdRoute
   AdminUtilisateursIdRoute: typeof AdminUtilisateursIdRoute
@@ -542,6 +622,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminModerationRoute: AdminModerationRoute,
   AdminPaiementsRoute: AdminPaiementsRoute,
   AdminParrainagesRoute: AdminParrainagesRoute,
+  AdminPublicationsRoute: AdminPublicationsRoute,
   AdminIndexRoute: AdminIndexRoute,
   AdminEpisodesIdRoute: AdminEpisodesIdRoute,
   AdminUtilisateursIdRoute: AdminUtilisateursIdRoute,
@@ -562,11 +643,14 @@ const rootRouteChildren: RootRouteChildren = {
   InscriptionRoute: InscriptionRoute,
   MonAvisRoute: MonAvisRoute,
   MotDePasseOublieRoute: MotDePasseOublieRoute,
+  ReglesPublicationRoute: ReglesPublicationRoute,
   SoutenirRoute: SoutenirRoute,
   StylesRoute: StylesRoute,
   VerifierRoute: VerifierRoute,
   EpisodesIdRoute: EpisodesIdRoute,
+  GalerieIdRoute: GalerieIdRoute,
   SeriesIdRoute: SeriesIdRoute,
+  GalerieIndexRoute: GalerieIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

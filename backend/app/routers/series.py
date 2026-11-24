@@ -8,11 +8,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app import moderation, storage
+from app import moderation, protected, storage
 from app.config import get_settings
 from app.db import get_session
 from app.models import Character, Series, User
-from app.schemas import CharacterIn, SeriesIn
+from app.schemas import CharacterEdit, CharacterIn, SeriesIn
 from app.security import verified_user
 from app.services import current_plan
 
@@ -31,6 +31,13 @@ async def refuse_blocked(session: AsyncSession, user: User, text: str) -> None:
         await session.commit()
     if not verdict.allowed:
         raise HTTPException(422, {"code": "blocked_terms", "message": "Ce texte contient des mots non autorisés.", "terms": verdict.blocked})
+
+
+def refuse_protected(text: str) -> None:
+    """Un personnage célèbre (Sonic, Naruto…) : le dessinateur IA le refusera. On le dit tout de suite."""
+    nom = protected.find(text)
+    if nom:
+        raise HTTPException(422, {"code": "protected_character", "message": protected.message(nom), "name": nom})
 
 
 _MAGIC = {"image/png": (b"\x89PNG\r\n\x1a\n",), "image/jpeg": (b"\xff\xd8\xff",), "image/webp": (b"RIFF",)}
@@ -84,6 +91,7 @@ async def create_series(body: SeriesIn, user: User = Depends(verified_user), ses
     if body.palette == "color" and not plan.color:
         raise HTTPException(403, {"code": "plan_limit", "message": f"La couleur n'est pas incluse dans le plan {plan.name}."})
     await refuse_blocked(session, user, body.premise)
+    refuse_protected(body.premise)
     series = Series(owner_id=user.id, **body.model_dump())
     session.add(series)
     await session.commit()
@@ -106,6 +114,7 @@ async def add_character(series_id: str, body: CharacterIn, user: User = Depends(
     """Ajoute un personnage à la bibliothèque de la série. Sa fiche est dessinée au premier épisode où il joue."""
     series = await owned_series(session, user, series_id)
     await refuse_blocked(session, user, f"{body.name} {body.role} {body.description}")
+    refuse_protected(f"{body.name} {body.description}")
     slug = base = re.sub(r"[^a-z0-9]+", "-", moderation.normalize(body.name)).strip("-") or "perso"
     taken = {c.slug for c in series.characters}
     n = 2
@@ -119,3 +128,21 @@ async def add_character(series_id: str, body: CharacterIn, user: User = Depends(
     session.add(character)
     await session.commit()
     return character_out(character)
+
+
+@router.patch("/characters/{character_id}")
+async def edit_character(character_id: str, body: CharacterEdit, user: User = Depends(verified_user), session: AsyncSession = Depends(get_session)):
+    """Modifie un personnage tant que sa fiche n'est pas dessinée (après un refus du dessinateur, par exemple)."""
+    c = (await session.execute(
+        select(Character).join(Series).where(Character.id == character_id, Series.owner_id == user.id)
+    )).scalar_one_or_none()
+    if not c:
+        raise HTTPException(404, "Personnage introuvable.")
+    if c.sheet_path:
+        raise HTTPException(409, "Ce personnage est déjà dessiné : pour garder la cohérence des épisodes, créez plutôt un nouveau personnage.")
+    await refuse_blocked(session, user, f"{body.name} {body.role} {body.description}")
+    refuse_protected(f"{body.name} {body.description}")
+    c.name, c.role, c.description = body.name, body.role, body.description
+    c.look = ""      # nouveau design au prochain épisode
+    await session.commit()
+    return character_out(c)

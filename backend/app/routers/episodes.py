@@ -8,10 +8,10 @@ from app import budget, storage, usage
 from app.config import get_settings
 from app.db import get_session
 from app.models import Episode, EpisodeCharacter, Page, Series, User
-from app.pipeline.runner import remaining_images
+from app.pipeline.runner import delivered_images, remaining_images
 from app.plans import MIN_PAGES
 from app.queue import enqueue
-from app.routers.series import owned_series, refuse_blocked
+from app.routers.series import owned_series, refuse_blocked, refuse_protected
 from app.schemas import EpisodeIn, RedrawIn
 from app.security import verified_user
 from app.services import current_plan
@@ -50,7 +50,7 @@ async def create_episode(series_id: str, body: EpisodeIn, user: User = Depends(v
     if any(e.status in RUNNING for e in series.episodes):
         raise HTTPException(409, "Un épisode de cette série est déjà en cours de génération.")
     if any(e.status == "failed" for e in series.episodes):
-        raise HTTPException(409, "Reprenez l'épisode interrompu avant d'en lancer un nouveau.")
+        raise HTTPException(409, {"code": "episode_failed", "message": "Un épisode de cette série est interrompu : reprenez-le ou abandonnez-le (page de l'épisode) avant d'en lancer un nouveau."})
 
     plan, _ = await current_plan(session, user.id)
     if not MIN_PAGES <= body.page_count <= plan.max_pages:
@@ -65,6 +65,7 @@ async def create_episode(series_id: str, body: EpisodeIn, user: User = Depends(v
         raise HTTPException(422, "Un des personnages n'appartient pas à cette série.")
 
     await refuse_blocked(session, user, body.direction)
+    refuse_protected(body.direction)
     await budget.guard(session)
 
     number = (await session.execute(select(func.coalesce(func.max(Episode.number), 0)).where(Episode.series_id == series.id))).scalar_one() + 1
@@ -119,6 +120,24 @@ async def resume(episode_id: str, user: User = Depends(verified_user), session: 
     e.status, e.error = "queued", ""
     await session.commit()
     await enqueue("run_episode", e.id)
+    return {"id": e.id, "status": e.status}
+
+
+async def abandon_episode(session: AsyncSession, e: Episode) -> None:
+    """Abandon d'un épisode interrompu ou refusé : rien n'est plus dessiné, la réserve restante est rendue.
+    Les images déjà livrées restent facturées et visibles."""
+    if e.status not in ("failed", "blocked"):
+        raise HTTPException(409, "Seul un épisode interrompu ou refusé peut être abandonné.")
+    e.status = "canceled"
+    await usage.settle(session, e.series.owner_id, e.id, await delivered_images(session, e.id))
+
+
+@router.post("/episodes/{episode_id}/abandon")
+async def abandon(episode_id: str, user: User = Depends(verified_user), session: AsyncSession = Depends(get_session)):
+    """L'auteur abandonne un épisode bloqué pour pouvoir lancer le suivant."""
+    e = await owned_episode(session, user, episode_id)
+    await abandon_episode(session, e)
+    await session.commit()
     return {"id": e.id, "status": e.status}
 
 

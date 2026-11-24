@@ -16,6 +16,7 @@ from app.routers import (
     auth,
     billing,
     episodes,
+    gallery,
     referrals,
     series,
     sharing,
@@ -44,7 +45,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"], allow_headers=["Authorization", "Content-Type"],
 )
 
-for module in (auth, series, episodes, billing, admin, admin_ops, testimonials, sharing, referrals):
+for module in (auth, series, episodes, billing, admin, admin_ops, testimonials, sharing, referrals, gallery):
     app.include_router(module.router)
 
 # Images en local. En production : stockage S3/R2 et URL signées.

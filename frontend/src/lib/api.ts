@@ -101,7 +101,7 @@ export const ACTIVE = ["queued", "designing", "writing", "moderating", "drawing"
 export const STATUS_LABEL: Record<string, string> = {
   queued: "En attente", designing: "Design des personnages", writing: "Écriture du scénario",
   moderating: "Vérification du contenu", drawing: "Dessin des pages", done: "Terminé",
-  blocked: "Refusé", failed: "Interrompu",
+  blocked: "Refusé", failed: "Interrompu", canceled: "Abandonné",
 };
 
 /** Réduit une photo à 1280 px et la convertit en JPEG : l'API n'accepte que JPEG, PNG ou WebP, 3 Mo au plus. */

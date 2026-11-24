@@ -14,6 +14,7 @@ const TABS = [
   ["/admin/utilisateurs", "Utilisateurs", false],
   ["/admin/episodes", "Épisodes", false],
   ["/admin/paiements", "Paiements", false],
+  ["/admin/publications", "Publications", false],
   ["/admin/avis", "Avis", false],
   ["/admin/parrainages", "Parrainages", false],
   ["/admin/moderation", "Modération", false],
@@ -27,6 +28,11 @@ function AdminLayout() {
     enabled: !!me?.is_admin, refetchInterval: 60_000,
   });
   const enAttente = aRelire?.total ?? 0;
+  const { data: pubs } = useQuery({
+    queryKey: ["admin", "publications", "compteur"], queryFn: () => api<{ pending: number }>("/admin/publications?status=pending"),
+    enabled: !!me?.is_admin, refetchInterval: 60_000,
+  });
+  const aPublier = pubs?.pending ?? 0;
   if (isLoading) return <Container><p className="text-encre-douce">Chargement…</p></Container>;
   if (!me?.is_admin) {
     return (
@@ -48,6 +54,7 @@ function AdminLayout() {
             className="inline-flex min-h-11 items-center rounded-[4px] border-2 border-transparent px-3 font-bold hover:border-encre"
             activeProps={{ className: "!border-encre bg-encre text-bulle" }}>
             {label}
+            {to === "/admin/publications" && aPublier > 0 && <span className="tabular ml-2 rounded-full bg-vermillon px-2 text-[12px] text-sur-vermillon" aria-label={`${aPublier} à relire`}>{aPublier}</span>}
             {to === "/admin/avis" && enAttente > 0 && <span className="tabular ml-2 rounded-full bg-vermillon px-2 text-[12px] text-sur-vermillon" aria-label={`${enAttente} à relire`}>{enAttente}</span>}
           </Link>
         ))}

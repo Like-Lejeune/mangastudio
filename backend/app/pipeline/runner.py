@@ -35,6 +35,14 @@ class Blocked(Exception):
     """La modération a arrêté l'épisode."""
 
 
+def refused_message(names: list[str]) -> str:
+    qui = " et ".join(f"« {n} »" for n in names)
+    return (f"Le dessinateur IA refuse de dessiner {qui}. C'est presque toujours parce que le nom ou l'apparence "
+            "ressemble à un personnage existant (protégé par le droit d'auteur), ou à un contenu interdit. "
+            "Modifiez ce personnage depuis la page de la série (autre nom, autre apparence), puis lancez un nouvel épisode. "
+            "Les crédits non utilisés vous ont été rendus.")
+
+
 def _mime(path: str) -> str:
     return MIME.get(path.rsplit(".", 1)[-1], "image/png")
 
@@ -84,6 +92,10 @@ async def run_episode(episode_id: str, studio: Studio | None = None) -> None:
                 status, error = "failed", f"Pages à refaire : {', '.join(map(str, failed))}."
         except Blocked as e:
             status, error = "blocked", str(e)
+        except ContentBlocked:
+            log.warning("épisode %s refusé par le filtre du fournisseur", episode_id)
+            status, error = "blocked", ("Le dessinateur IA a refusé une image de cet épisode (personnage ou scène trop proche d'une "
+                                        "œuvre existante, ou contenu interdit). Modifiez la série ou les personnages, puis lancez un nouvel épisode.")
         except Exception as e:  # noqa: BLE001  (toute panne doit laisser l'épisode dans un état lisible)
             log.exception("épisode %s", episode_id)
             status, error = "failed", f"La génération s'est interrompue ({type(e).__name__}). Vous pouvez la reprendre."
@@ -168,14 +180,30 @@ async def _run(session: AsyncSession, episode: Episode, studio: Studio, user_id:
 
     async def sheet(c: Character):
         refs = [(await storage.load(c.photo_path), _mime(c.photo_path))] if c.photo_path else []
-        info = {"name": c.name, "look": c.look}
         async with sem:
-            return c, await _draw(studio, prompts.sheet_prompt(info, series.style, series.palette, bool(refs)), refs, "1536x1024")
+            try:
+                prompt = prompts.sheet_prompt({"name": c.name, "look": c.look}, series.style, series.palette, bool(refs))
+                return c, await _draw(studio, prompt, refs, "1536x1024")
+            except ContentBlocked:
+                # Un nom connu suffit souvent à déclencher le filtre : dernier essai sans le nom.
+                prompt = prompts.sheet_prompt({"name": "an original character", "look": c.look}, series.style, series.palette, bool(refs))
+                try:
+                    return c, await _draw(studio, prompt, refs, "1536x1024")
+                except ContentBlocked:
+                    return c, None
 
+    refused = []
     for c, result in await asyncio.gather(*(sheet(c) for c in cast if not c.sheet_path)):
+        if result is None:
+            refused.append(c.name)
+            moderation.log(session, user_id=user_id, episode_id=episode.id, checkpoint="image", action="block",
+                           rule="fiche refusée par le dessinateur", excerpt=f"{c.name} : {c.look}"[:500])
+            continue
         c.sheet_path = await storage.save(f"series/{series.id}/sheets/{c.slug}", result.image, result.mime)
         record("sheet", studio.artist, studio.artist_model, result.usage)
     await session.commit()
+    if refused:
+        raise Blocked(refused_message(refused))
 
     sheets = {c.slug: (await storage.load(c.sheet_path), _mime(c.sheet_path)) for c in cast}
     names = {c.slug: c.name for c in cast}

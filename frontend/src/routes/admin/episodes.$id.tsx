@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ACTIVE, type Episode } from "@/lib/api";
 import { CHECKPOINT_LABEL, dateTime, num, usd, type ModerationEvent } from "@/lib/admin";
-import { ErrorNote, Pill } from "@/components/ink";
+import { Button, ErrorNote, Pill } from "@/components/ink";
 import { EpisodeStatus, Section, Stat, Table } from "@/components/admin";
 
 export const Route = createFileRoute("/admin/episodes/$id")({ component: EpisodeAdminPage });
@@ -22,6 +22,11 @@ function EpisodeAdminPage() {
     queryKey: ["admin", "episode", id], queryFn: () => api<Detail>(`/admin/episodes/${id}`),
     refetchInterval: (q) => (q.state.data && ACTIVE.includes(q.state.data.status) ? 3000 : false),
   });
+  const qc = useQueryClient();
+  const abandon = useMutation({
+    mutationFn: () => api(`/admin/episodes/${id}/abandon`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin"] }),
+  });
   if (isLoading) return <p className="text-encre-douce">Chargement de l'épisode…</p>;
   if (error || !e) return <ErrorNote error={error ?? new Error("Épisode introuvable.")} />;
   const u = e.usage;
@@ -38,6 +43,18 @@ function EpisodeAdminPage() {
         {e.owner ? <Link to="/admin/utilisateurs/$id" params={{ id: e.owner.id }} className="font-bold text-indigo underline">{e.owner.email}</Link> : "un compte supprimé"}
       </p>
       {e.error && <p role="alert" className="mt-4 rounded-[4px] border-2 border-alerte bg-bulle p-3 font-medium text-alerte">{e.error}</p>}
+      {(e.status === "failed" || e.status === "blocked") && (
+        <div className="mt-4 rounded-[4px] border-2 border-encre bg-bulle p-4">
+          <p className="text-[14px] leading-5 text-encre-douce">
+            L'auteur ne peut pas lancer d'autre épisode dans cette série tant que celui-ci est interrompu. L'abandonner le débloque :
+            rien n'est plus dessiné, les crédits réservés et non utilisés lui sont rendus. L'action est notée dans le journal.
+          </p>
+          <Button className="mt-3" disabled={abandon.isPending} onClick={() => { if (confirm("Abandonner cet épisode et rendre les crédits non utilisés ?")) abandon.mutate(); }}>
+            Abandonner l'épisode et rendre les crédits
+          </Button>
+          <ErrorNote error={abandon.error} />
+        </div>
+      )}
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Coût IA réel" value={usd(e.cost_usd, 3)} sub={u && u.credits ? <>{usd(e.cost_usd / u.credits, 3)} par crédit</> : undefined} />

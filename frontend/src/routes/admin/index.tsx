@@ -28,6 +28,13 @@ function OverviewPage() {
 
       <BudgetDuJour b={o.budget} />
 
+      {(o.publications_pending ?? 0) > 0 && (
+        <Link to="/admin/publications" className="mt-4 flex min-h-11 items-center justify-between gap-3 rounded-[4px] border-2 border-encre bg-soleil px-4 py-2 font-bold hover:underline">
+          <span><span className="tabular">{o.publications_pending}</span> chapitre{(o.publications_pending ?? 0) > 1 ? "s" : ""} à relire avant publication dans la galerie</span>
+          <span aria-hidden>→</span>
+        </Link>
+      )}
+
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Utilisateurs" value={num(o.users.total)} sub={<>+{num(o.users.new_7d)} en 7 j · +{num(o.users.new_30d)} en 30 j{o.users.suspended ? ` · ${o.users.suspended} suspendu(s)` : ""}</>} />
         <Stat label="Abonnés payants" value={num(o.users.paying.creator + o.users.paying.studio)} sub={<>Créateur {num(o.users.paying.creator)} · Studio {num(o.users.paying.studio)}</>} />

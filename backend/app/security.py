@@ -69,3 +69,16 @@ async def admin_user(user: User = Depends(current_user)) -> User:
     if not user.is_admin:
         raise HTTPException(403, "Réservé aux administrateurs.")
     return user
+
+
+async def optional_user(
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    session: AsyncSession = Depends(get_session),
+) -> User | None:
+    """Pages publiques : le visiteur peut être connecté ou non (ex. savoir s'il a déjà aimé)."""
+    if not creds:
+        return None
+    try:
+        return await current_user(creds, session)
+    except HTTPException:
+        return None

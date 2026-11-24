@@ -4,10 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Loader, Maximize2, RotateCcw, X } from "lucide-react";
 import { api, ACTIVE, STATUS_LABEL, type Episode } from "@/lib/api";
 import { useMe } from "@/lib/session";
-import { Button, Card, Container, ErrorNote, Field, PageTitle, Pill, RequireAuth, Textarea } from "@/components/ink";
+import { btnClass, Button, Card, Container, ErrorNote, Field, PageTitle, Pill, RequireAuth, Textarea } from "@/components/ink";
 import { cn } from "@/lib/utils";
 import { DonnerAvis } from "@/components/DonnerAvis";
 import { PartagerChapitre } from "@/components/PartagerChapitre";
+import { PublierChapitre } from "@/components/PublierChapitre";
 
 export const Route = createFileRoute("/episodes/$id")({
   head: () => ({
@@ -57,6 +58,10 @@ function EpisodePage() {
   }, [ep?.status, ep, qc]);
   const [current, setCurrent] = useState(0);
   const [reader, setReader] = useState(false);
+  const abandon = useMutation({
+    mutationFn: () => api(`/episodes/${id}/abandon`, { method: "POST" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["episode", id] }); qc.invalidateQueries({ queryKey: ["series"] }); qc.invalidateQueries({ queryKey: ["me"] }); },
+  });
   const resume = useMutation({
     mutationFn: () => api(`/episodes/${id}/resume`, { method: "POST" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["episode", id] }),
@@ -100,18 +105,36 @@ function EpisodePage() {
       </ol>
 
       {ep.status === "blocked" && (
-        <Card className="mb-8 border-alerte"><p className="font-display text-[24px] leading-[30px] text-alerte">Épisode refusé par la modération</p>
-          {ep.error && <p className="mt-2">{ep.error}</p>}<p className="mt-2 font-bold">Aucun crédit n'a été débité.</p></Card>
+        <Card className="mb-8 border-alerte"><p className="font-display text-[24px] leading-[30px] text-alerte">Épisode arrêté</p>
+          {ep.error && <p className="mt-2">{ep.error}</p>}
+          <p className="mt-2 font-bold">Les crédits non utilisés vous ont été rendus.</p>
+          {ep.series_id && (
+            <p className="mt-4"><Link to="/series/$id" params={{ id: String(ep.series_id) }} className={btnClass("primary")}>Modifier mes personnages et relancer</Link></p>
+          )}
+        </Card>
       )}
       {ep.status === "failed" && (
         <Card className="mb-8"><p className="font-bold text-alerte">L'épisode s'est interrompu.</p>{ep.error && <p className="mt-2">{ep.error}</p>}
-          <ErrorNote error={resume.error} />
-          <Button className="mt-4" variant="primary" disabled={resume.isPending} onClick={() => resume.mutate()}><RotateCcw size={20} strokeWidth={2} aria-hidden />Reprendre</Button></Card>
+          <p className="mt-2 text-[14px] leading-5 text-encre-douce">
+            Reprendre redessine seulement ce qui manque. Si l'interruption revient, abandonnez l'épisode : les crédits non utilisés vous sont rendus
+            et vous pourrez en lancer un nouveau (après avoir modifié vos personnages si besoin).
+          </p>
+          <ErrorNote error={resume.error ?? abandon.error} />
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Button variant="primary" disabled={resume.isPending || abandon.isPending} onClick={() => resume.mutate()}><RotateCcw size={20} strokeWidth={2} aria-hidden />Reprendre</Button>
+            <Button disabled={resume.isPending || abandon.isPending} onClick={() => { if (confirm("Abandonner cet épisode ? Les crédits non utilisés vous seront rendus.")) abandon.mutate(); }}>Abandonner l'épisode</Button>
+          </div>
+        </Card>
+      )}
+      {ep.status === "canceled" && (
+        <Card className="mb-8"><p className="font-bold">Épisode abandonné.</p>
+          <p className="mt-2 text-encre-douce">Les crédits non utilisés vous ont été rendus. Vous pouvez lancer un nouvel épisode depuis la page de la série.</p>
+        </Card>
       )}
 
       <div className="grid gap-8 lg:grid-cols-[1fr_280px]">
         <section aria-label="Page sélectionnée">
-          <PageView url={page?.url} number={page?.number ?? 1} failed={page?.status === "failed"} big />
+          <PageView url={page?.url} number={page?.number ?? 1} failed={page?.status === "failed"} stopped={!active} big />
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <Button aria-label="Page précédente" disabled={current <= 0} onClick={() => setCurrent((c) => c - 1)}><ChevronLeft size={20} strokeWidth={2} aria-hidden /></Button>
             <span className="tabular font-bold">Page {page?.number ?? 1} / {total}</span>
@@ -127,8 +150,8 @@ function EpisodePage() {
           <ul className="grid grid-cols-3 gap-3 lg:grid-cols-2">
             {pages.map((p, i) => (
               <li key={p.id}>
-                <button onClick={() => setCurrent(i)} aria-current={i === current} aria-label={`Page ${p.number}${p.url ? "" : p.status === "failed" ? ", à refaire" : ", en cours"}`} className={cn("block w-full", i === current && "outline-3 outline-offset-2 outline-vermillon")}>
-                  <PageView url={p.url} number={p.number} failed={p.status === "failed"} />
+                <button onClick={() => setCurrent(i)} aria-current={i === current} aria-label={`Page ${p.number}${p.url ? "" : p.status === "failed" ? ", à refaire" : active ? ", en cours" : ", non dessinée"}`} className={cn("block w-full", i === current && "outline-3 outline-offset-2 outline-vermillon")}>
+                  <PageView url={p.url} number={p.number} failed={p.status === "failed"} stopped={!active} />
                 </button>
               </li>
             ))}
@@ -138,14 +161,15 @@ function EpisodePage() {
 
       {ep.usage && <UsageCard u={ep.usage} />}
       {finished && <PartagerChapitre ep={ep} />}
+      {finished && <PublierChapitre episodeId={ep.id} />}
       {finished && <DonnerAvis episodeId={ep.id} compact />}
       {reader && <Reader pages={pages.filter((p) => p.url)} onClose={() => setReader(false)} />}
     </Container>
   );
 }
 
-function PageView({ url, number, big, failed }: { url?: string | null | undefined; number: number; big?: boolean; failed?: boolean }) {
-  const state = failed ? "À refaire" : "En cours";
+function PageView({ url, number, big, failed, stopped }: { url?: string | null | undefined; number: number; big?: boolean; failed?: boolean; stopped?: boolean }) {
+  const state = failed ? "À refaire" : stopped ? "Non dessinée" : "En cours";
   return url ? (
     <img src={url} alt={`Page ${number}`} className={cn("aspect-[2/3] w-full border-2 border-encre bg-blanc object-contain", big && "mx-auto max-w-[560px]")} />
   ) : (

@@ -296,3 +296,28 @@ class UserMission(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     mission: Mapped[str] = mapped_column(String(30))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class Publication(Base):
+    """Un chapitre proposé à la galerie publique. Visible seulement une fois publié par l'administration."""
+    __tablename__ = "publications"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    episode_id: Mapped[str] = mapped_column(ForeignKey("episodes.id", ondelete="CASCADE"), unique=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    # pending | published | rejected | withdrawn (retiré par l'auteur ou l'administration)
+    status: Mapped[str] = mapped_column(String(10), default="pending", index=True)
+    reason: Mapped[str] = mapped_column(String(300), default="")      # motif d'un refus ou d'un retrait
+    featured: Mapped[bool] = mapped_column(Boolean, default=False)     # coup de cœur de l'équipe
+    likes: Mapped[int] = mapped_column(Integer, default=0)            # compteur (la table Like fait foi)
+    terms_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+
+
+class Like(Base):
+    __tablename__ = "likes"
+    __table_args__ = (UniqueConstraint("user_id", "publication_id"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    publication_id: Mapped[str] = mapped_column(ForeignKey("publications.id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)

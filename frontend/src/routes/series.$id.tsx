@@ -1,8 +1,8 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Check, Play, UserPlus } from "lucide-react";
-import { api, photoToDataUrl, STATUS_LABEL, ACTIVE, type SeriesDetail } from "@/lib/api";
+import { Check, Pencil, Play, UserPlus } from "lucide-react";
+import { api, photoToDataUrl, STATUS_LABEL, ACTIVE, type Character, type SeriesDetail } from "@/lib/api";
 import { useMe } from "@/lib/session";
 import { Button, Card, Container, ErrorNote, Field, Input, PageTitle, Pill, RequireAuth, Textarea } from "@/components/ink";
 import { cn } from "@/lib/utils";
@@ -37,6 +37,7 @@ function SeriesPage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [pages, setPages] = useState(4);
   const [direction, setDirection] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
   const maxChars = me?.plan.max_characters ?? 1;
   const maxPages = Math.max(4, me?.plan.max_pages ?? 4);
 
@@ -72,8 +73,8 @@ function SeriesPage() {
                 const cid = String(c.id); const on = selected.includes(cid);
                 const full = !on && selected.length >= maxChars;
                 return (
-                  <li key={cid}>
-                    <label className={cn("relative flex h-full cursor-pointer flex-col rounded-[8px] border-2 border-encre bg-bulle p-3", on ? "shadow-ink-lg outline-3 outline-vermillon" : "shadow-ink", full && "cursor-not-allowed opacity-60")}>
+                  <li key={cid} className="flex flex-col">
+                    <label className={cn("relative flex flex-1 cursor-pointer flex-col rounded-[8px] border-2 border-encre bg-bulle p-3", on ? "shadow-ink-lg outline-3 outline-vermillon" : "shadow-ink", full && "cursor-not-allowed opacity-60")}>
                       <input type="checkbox" className="sr-only" checked={on} disabled={full} onChange={() => toggle(cid)} />
                       {c.sheet_url ? <img src={c.sheet_url} alt="" className="aspect-[3/2] w-full border-2 border-encre bg-blanc object-cover" /> : <div className="trame aspect-[3/2] w-full border-2 border-encre" aria-hidden />}
                       <span className="mt-2 font-bold">{c.name}</span>
@@ -83,10 +84,18 @@ function SeriesPage() {
                         {on ? <><Check size={16} strokeWidth={2} aria-hidden />Sélectionné</> : "Non sélectionné"}
                       </span>
                     </label>
+                    {!c.sheet_url && (
+                      <button type="button" onClick={() => setEditing(cid)} className="mt-2 inline-flex min-h-11 items-center gap-1 text-[14px] font-bold text-indigo underline">
+                        <Pencil size={14} strokeWidth={2.5} aria-hidden />Modifier {c.name}
+                      </button>
+                    )}
                   </li>
                 );
               })}
             </ul>
+            {editing && s.characters.find((c) => String(c.id) === editing) && (
+              <EditCharacter key={editing} seriesId={id} c={s.characters.find((c) => String(c.id) === editing)!} onClose={() => setEditing(null)} />
+            )}
             <AddCharacter seriesId={id} />
           </section>
 
@@ -184,6 +193,36 @@ function AddCharacter({ seriesId }: { seriesId: string }) {
         <div className="flex flex-wrap gap-3 sm:col-span-2">
           <Button type="submit" disabled={m.isPending || (!!photo && !consent)}>{m.isPending ? "Ajout…" : "Ajouter"}</Button>
           <Button type="button" onClick={() => setOpen(false)}>Annuler</Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+/** Modifier un personnage pas encore dessiné : après un refus du dessinateur, on change son nom ou son apparence. */
+function EditCharacter({ seriesId, c, onClose }: { seriesId: string; c: Character; onClose: () => void }) {
+  const [name, setName] = useState(c.name); const [role, setRole] = useState(c.role); const [description, setDescription] = useState(c.description);
+  const qc = useQueryClient();
+  const m = useMutation({
+    mutationFn: () => api(`/characters/${c.id}`, { method: "PATCH", body: { name, role, description } }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["series", seriesId] }); onClose(); },
+  });
+  return (
+    <Card className="mt-6">
+      <h3 className="font-display text-[24px] leading-[30px]">Modifier {c.name}</h3>
+      <p className="mt-1 text-[14px] leading-5 text-encre-douce">
+        Inventez un personnage à vous : un nom et une apparence qui ne copient pas un héros connu (le dessinateur IA refuse les personnages protégés).
+      </p>
+      <form className="mt-4 grid gap-4 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); m.mutate(); }}>
+        <Field label="Nom" htmlFor="e-name"><Input id="e-name" required maxLength={60} value={name} onChange={(e) => setName(e.target.value)} /></Field>
+        <Field label="Rôle" htmlFor="e-role"><Input id="e-role" maxLength={120} value={role} onChange={(e) => setRole(e.target.value)} /></Field>
+        <div className="sm:col-span-2"><Field label="Description" htmlFor="e-desc">
+          <Textarea id="e-desc" maxLength={600} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Apparence, tenue, caractère…" />
+        </Field></div>
+        <div className="sm:col-span-2"><ErrorNote error={m.error} /></div>
+        <div className="flex flex-wrap gap-3 sm:col-span-2">
+          <Button type="submit" variant="primary" disabled={m.isPending}>{m.isPending ? "Enregistrement…" : "Enregistrer"}</Button>
+          <Button type="button" onClick={onClose}>Annuler</Button>
         </div>
       </form>
     </Card>
