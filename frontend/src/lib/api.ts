@@ -2,6 +2,22 @@ const TOKEN_KEY = "mangastudio.token";
 const BASE = (import.meta.env['VITE_API_URL'] as string | undefined) ?? "http://localhost:8000";
 
 const listeners = new Set<() => void>();
+/** Téléchargement d'un fichier protégé (ex. PDF) : le jeton part dans l'en-tête, puis le navigateur enregistre. */
+export async function downloadFile(path: string, filename: string): Promise<void> {
+  const token = tokenStore.get();
+  const r = await fetch(`${BASE}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!r.ok) {
+    let detail: unknown = null;
+    try { detail = (await r.json()).detail; } catch { /* réponse non JSON */ }
+    const d = detail as { message?: string; code?: string } | string | null;
+    throw new ApiError(typeof d === "string" ? d : d?.message ?? "Téléchargement impossible.", r.status, typeof d === "object" && d ? d.code : undefined);
+  }
+  const url = URL.createObjectURL(await r.blob());
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
 export const tokenStore = {
   get: () => (typeof window === "undefined" ? null : localStorage.getItem(TOKEN_KEY)),
   set(t: string | null) {
@@ -73,10 +89,11 @@ export type SeriesDetail = SeriesItem & { style?: string; palette?: "bw" | "colo
 export type Stage = { stage: string; calls: number; input_tokens: number; output_tokens: number; images: number };
 export type Usage = { input_tokens: number; output_tokens: number; images: number; credits: number; stages: Stage[] };
 export type PageItem = { id: string; number: number; status?: "pending" | "done" | "failed"; url?: string | null; attempts?: number; editor_note?: string };
-export type Episode = EpisodeItem & { series_id?: string; error?: string | null; pages: PageItem[]; usage?: Usage | null };
+export type Episode = EpisodeItem & { series_id?: string; error?: string | null; pages: PageItem[]; usage?: Usage | null; share_url?: string | null };
 
 export type PlanOffer = Plan & { credits: number; price_usd_cents: number; price_xaf: number };
-export type Plans = { plans: PlanOffer[]; pack: { credits: number; price_usd_cents: number; price_xaf: number } };
+export type PackOffer = { id: "pack15" | "pack25" | "pack"; credits: number; price_usd_cents: number; price_xaf: number };
+export type Plans = { plans: PlanOffer[]; pack: { credits: number; price_usd_cents: number; price_xaf: number }; packs?: PackOffer[] };
 /** Demande de paiement mobile money : `pending` jusqu'à la validation sur le téléphone. */
 export type Payment = { reference: string; product: string; amount: number; currency: string; status: "pending" | "paid" | "failed"; error?: string; message?: string };
 

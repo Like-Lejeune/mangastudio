@@ -27,13 +27,13 @@ from app.billing import trustchange_client as tc
 from app.billing.base import PaymentEvent, apply_event
 from app.config import get_settings
 from app.models import PaymentIntent, User, new_id
-from app.plans import PACKS, PLANS
+from app.plans import PACK_PRICE_XAF, PLANS
 
 log = logging.getLogger("billing.trust")
 
 
 def price_xaf(product: str) -> int:
-    return PACKS[product].price_xaf if product in PACKS else PLANS[product].price_xaf
+    return PACK_PRICE_XAF if product == "pack" else PLANS[product].price_xaf
 
 
 def _status(transaction: dict) -> str:

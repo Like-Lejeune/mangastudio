@@ -153,6 +153,8 @@ class Episode(Base):
     summary: Mapped[str] = mapped_column(Text, default="")     # mémoire pour l'épisode suivant
     script: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    # Lien de lecture public : vide = chapitre privé. Couper le lien le remet à vide.
+    share_token: Mapped[str | None] = mapped_column(String(32), unique=True, nullable=True)
 
     series: Mapped[Series] = relationship(back_populates="episodes")
     pages: Mapped[list["Page"]] = relationship(back_populates="episode", order_by="Page.number")
@@ -254,3 +256,13 @@ class Testimonial(Base):
     status: Mapped[str] = mapped_column(String(10), default="pending", index=True)   # pending | approved | rejected
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PdfDownload(Base):
+    """Un téléchargement PDF : sert au quota mensuel des comptes gratuits."""
+    __tablename__ = "pdf_downloads"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    episode_id: Mapped[str] = mapped_column(String(32))
+    watermark: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)

@@ -7,4 +7,6 @@ import { defineConfig } from "vite";
 export default defineConfig({
   plugins: [tanstackRouter({ target: "react", autoCodeSplitting: true }), react(), tailwindcss()],
   resolve: { alias: { "@": "/src" } },
+  // En local, les liens de partage (/lire/…) sont servis par l'API, comme Caddy le fait en production.
+  server: { proxy: { "/lire": "http://localhost:8000" } },
 });

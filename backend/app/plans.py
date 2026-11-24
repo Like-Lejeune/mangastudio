@@ -23,10 +23,25 @@ PLANS: dict[str, Plan] = {
     "studio": Plan("studio", "Studio", 300, 10, 24, True, True, 2999, 18000),
 }
 
-# Pack de crédits à l'unité (n'expire pas).
-PACK_CREDITS = 50
-PACK_PRICE_USD_CENTS = 599
-PACK_PRICE_XAF = 3500
+@dataclass(frozen=True)
+class Pack:
+    id: str
+    credits: int
+    price_xaf: int
+    price_usd_cents: int
+
+
+# Packs de crédits à l'unité (n'expirent pas). Du plus petit au plus grand ; les petits packs
+# coûtent un peu plus cher au crédit pour que les gros et les abonnements restent avantageux.
+PACKS: dict[str, Pack] = {
+    "pack15": Pack("pack15", 15, 1500, 249),
+    "pack25": Pack("pack25", 25, 2000, 349),
+    "pack": Pack("pack", 50, 3500, 599),      # identifiant historique : le pack de 50
+}
+# Compatibilité avec l'ancien code et les anciens paiements.
+PACK_CREDITS = PACKS["pack"].credits
+PACK_PRICE_USD_CENTS = PACKS["pack"].price_usd_cents
+PACK_PRICE_XAF = PACKS["pack"].price_xaf
 
 PERIOD_DAYS = 30
 

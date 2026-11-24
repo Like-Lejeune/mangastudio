@@ -10,16 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from app import checks
 from app.config import get_settings
 from app.db import init_db
-from app.routers import (
-    admin,
-    admin_ops,
-    auth,
-    billing,
-    episodes,
-    series,
-    sharing,
-    testimonials,
-)
+from app.routers import admin, admin_ops, auth, billing, episodes, series, testimonials
 
 
 @asynccontextmanager
@@ -43,7 +34,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"], allow_headers=["Authorization", "Content-Type"],
 )
 
-for module in (auth, series, episodes, billing, admin, admin_ops, testimonials, sharing):
+for module in (auth, series, episodes, billing, admin, admin_ops, testimonials):
     app.include_router(module.router)
 
 # Images en local. En production : stockage S3/R2 et URL signées.

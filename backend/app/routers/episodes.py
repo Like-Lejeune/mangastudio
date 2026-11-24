@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app import budget, storage, usage
+from app.config import get_settings
 from app.db import get_session
 from app.models import Episode, EpisodeCharacter, Page, Series, User
 from app.pipeline.runner import remaining_images
@@ -87,6 +88,7 @@ async def episode_out(session: AsyncSession, e: Episode) -> dict:
         "pages": [{"id": p.id, "number": p.number, "status": p.status, "url": storage.url(p.image_path), "attempts": p.attempts,
                    "editor_note": p.editor_note} for p in e.pages],
         "usage": await usage.episode_usage(session, e.id),
+        "share_url": f"{get_settings().frontend_url.split(',')[0].strip().rstrip('/')}/lire/{e.share_token}" if e.share_token else None,
     }
 
 

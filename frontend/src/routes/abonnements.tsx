@@ -41,16 +41,30 @@ function PlansPage() {
         {data?.plans.map((p) => <PlanCard key={p.id} plan={p} current={me?.plan.id === p.id} onChoose={setProduct} />)}
       </div>
 
-      {data?.pack && (
-        <Card featured className="relative mt-12 flex flex-col gap-4 sm:flex-row sm:items-center">
-          <Onomatopee className="absolute -top-5 right-4">+{data.pack.credits}</Onomatopee>
-          <div className="flex-1">
-            <h2 className="font-display text-[24px] leading-[30px]">Pack de {data.pack.credits} crédits</h2>
-            <p className="text-encre-douce">Ces crédits s'ajoutent à votre solde et n'expirent pas.</p>
-          </div>
-          <p className="font-display text-[32px] leading-[38px]">{fcfa(data.pack.price_xaf)}</p>
-          <Button variant="primary" onClick={() => setProduct({ id: "pack", label: `Pack de ${data.pack.credits} crédits`, price: data.pack.price_xaf })}>Acheter le pack</Button>
-        </Card>
+      {(data?.packs ?? (data?.pack ? [{ id: "pack" as const, ...data.pack }] : [])).length > 0 && (
+        <section className="mt-12">
+          <h2 className="font-display text-[28px] leading-[34px]">Packs de crédits</h2>
+          <p className="mt-1 text-encre-douce">Ils s'ajoutent à votre solde, avec ou sans abonnement, et n'expirent pas.</p>
+          <ul className="mt-6 grid gap-6 sm:grid-cols-3">
+            {(data?.packs ?? [{ id: "pack" as const, ...data!.pack }]).map((pk, i, all) => {
+              const plusGros = i === all.length - 1;
+              return (
+                <li key={pk.id}>
+                  <Card featured={plusGros} className="relative flex h-full flex-col gap-3">
+                    <Onomatopee className="absolute -top-5 right-4">+{pk.credits}</Onomatopee>
+                    <h3 className="font-display text-[22px] leading-[28px]">{pk.credits} crédits</h3>
+                    <p className="font-display text-[30px] leading-[36px]">{fcfa(pk.price_xaf)}</p>
+                    <p className="tabular text-[14px] text-encre-douce">soit {Math.round(pk.price_xaf / pk.credits)} FCFA le crédit</p>
+                    <Button variant={plusGros ? "primary" : "secondary"} className="mt-auto"
+                      onClick={() => setProduct({ id: pk.id, label: `Pack de ${pk.credits} crédits`, price: pk.price_xaf })}>
+                      Acheter
+                    </Button>
+                  </Card>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       )}
       <p className="mt-8 text-[14px] leading-5 text-encre-douce">
         Paiement par mobile money : vous validez chaque paiement sur votre téléphone. Un plan payé est actif 30 jours, sans prélèvement automatique.

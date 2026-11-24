@@ -8,7 +8,7 @@ const POLL_MS = 3000;
 const WAIT_MAX_MS = 3 * 60 * 1000;
 export const fcfa = (n: number) => `${n.toLocaleString("fr-FR")} FCFA`;
 
-export type CheckoutProduct = { id: "creator" | "studio" | "pack" | "pack15" | "pack25" | "don"; label: string; price: number };
+export type CheckoutProduct = { id: "creator" | "studio" | "pack" | "don"; label: string; price: number };
 type Operator = { code: string; name: string };
 
 /** La forme exacte de la liste TrustChange n'est pas figée : on accepte un tableau ou un objet qui en contient un. */

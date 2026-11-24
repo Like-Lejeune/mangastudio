@@ -7,7 +7,6 @@ import { useMe } from "@/lib/session";
 import { Button, Card, Container, ErrorNote, Field, PageTitle, Pill, RequireAuth, Textarea } from "@/components/ink";
 import { cn } from "@/lib/utils";
 import { DonnerAvis } from "@/components/DonnerAvis";
-import { PartagerChapitre } from "@/components/PartagerChapitre";
 
 export const Route = createFileRoute("/episodes/$id")({
   head: () => ({
@@ -137,7 +136,6 @@ function EpisodePage() {
       </div>
 
       {ep.usage && <UsageCard u={ep.usage} />}
-      {finished && <PartagerChapitre ep={ep} />}
       {finished && <DonnerAvis episodeId={ep.id} compact />}
       {reader && <Reader pages={pages.filter((p) => p.url)} onClose={() => setReader(false)} />}
     </Container>

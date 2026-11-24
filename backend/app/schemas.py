@@ -57,7 +57,7 @@ class RedrawIn(BaseModel):
 
 
 class CheckoutIn(BaseModel):
-    product: Literal["creator", "studio", "pack", "don"]
+    product: Literal["creator", "studio", "pack", "pack15", "pack25", "don"]
     # Pour un don seulement : montant libre en FCFA.
     amount: int | None = Field(default=None, ge=500, le=1_000_000)
     provider: Literal["trust", "stripe"] = "trust"

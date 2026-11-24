@@ -114,3 +114,18 @@ async def test_don_montant_libre_sans_credit(client, account, monkeypatch):
     assert (await client.post("/billing/webhooks/trust", content=body, headers=headers)).json()["applied"] is True
     assert await credits(client, account) == before          # un don ne donne pas de crédits
     assert (await client.get(f"/billing/payments/{ref}", headers=account)).json()["status"] == "paid"
+
+
+@pytest.mark.parametrize("product,credits_attendus,prix", [("pack15", 15, 1500), ("pack25", 25, 2000), ("pack", 50, 3500)])
+async def test_trois_packs(client, account, monkeypatch, product, credits_attendus, prix):
+    fake, before = FakeTrust(monkeypatch), await credits(client, account)
+    r = await client.post("/billing/checkout", headers=account, json={"product": product, "phone": "699000000", "operator": "MTN_CM"})
+    assert r.status_code == 202
+    ref = r.json()["reference"]
+    assert fake.transactions[ref]["amount"] == prix
+    fake.finish(ref)
+    body, headers = fake.webhook(ref)
+    await client.post("/billing/webhooks/trust", content=body, headers=headers)
+    assert await credits(client, account) == before + credits_attendus
+    offre = (await client.get("/plans")).json()
+    assert [p["credits"] for p in offre["packs"]] == [15, 25, 50]

@@ -187,11 +187,7 @@ export function Accueil() {
             })}
           </ul>
         )}
-        {plans && (() => {
-          const packs = plans.packs ?? [{ id: "pack", ...plans.pack }];
-          const petit = packs[0]!;
-          return <p className="mt-8 text-center text-encre-douce">Besoin de plus ? Des packs de <b>{packs.map((p) => p.credits).join(", ").replace(/, (\d+)$/, " ou $1")} crédits</b>, dès <b>{fcfa(petit.price_xaf)}</b>, sans date d'expiration.</p>;
-        })()}
+        {plans && <p className="mt-8 text-center text-encre-douce">Besoin de plus ? Un pack de <b>{plans.pack.credits} crédits</b> à <b>{fcfa(plans.pack.price_xaf)}</b>, sans date d'expiration.</p>}
       </section>
 
       {/* ───── Appel final ───── */}

@@ -8,7 +8,7 @@ from app.billing.base import apply_event
 from app.config import get_settings
 from app.db import get_session
 from app.models import PaymentIntent, User
-from app.plans import PACK_CREDITS, PACK_PRICE_USD_CENTS, PACK_PRICE_XAF, PLANS
+from app.plans import PACKS, PLANS
 from app.schemas import CheckoutIn
 from app.security import verified_user
 
@@ -26,7 +26,8 @@ async def plans():
         "plans": [{"id": p.id, "name": p.name, "credits": p.credits, "max_characters": p.max_characters, "max_pages": p.max_pages,
                    "color": p.color, "redraw": p.redraw, "price_usd_cents": p.price_usd_cents, "price_xaf": p.price_xaf}
                   for p in PLANS.values()],
-        "pack": {"credits": PACK_CREDITS, "price_usd_cents": PACK_PRICE_USD_CENTS, "price_xaf": PACK_PRICE_XAF},
+        "pack": {"credits": PACKS["pack"].credits, "price_usd_cents": PACKS["pack"].price_usd_cents, "price_xaf": PACKS["pack"].price_xaf},
+        "packs": [{"id": p.id, "credits": p.credits, "price_xaf": p.price_xaf, "price_usd_cents": p.price_usd_cents} for p in PACKS.values()],
     }
 
 
@@ -46,6 +47,8 @@ async def checkout(body: CheckoutIn, user: User = Depends(verified_user), sessio
     interroge GET /billing/payments/{reference} jusqu'à `paid` ou `failed`."""
     if body.product == "don" and (body.provider != "trust" or not body.amount):
         raise HTTPException(422, "Un don se fait par mobile money, avec un montant d'au moins 500 FCFA.")
+    if body.provider == "stripe" and body.product in ("pack15", "pack25"):
+        raise HTTPException(422, "Les petits packs se paient par mobile money.")
     if body.provider == "stripe":
         if not get_settings().stripe_secret_key:
             raise HTTPException(503, "Le paiement par carte n'est pas encore disponible.")

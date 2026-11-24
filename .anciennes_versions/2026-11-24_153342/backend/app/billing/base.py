@@ -9,10 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import usage
 from app.models import Payment, Subscription, User, now
-from app.plans import PACKS, PERIOD_DAYS, PLANS
+from app.plans import PACK_CREDITS, PERIOD_DAYS, PLANS
 from app.services import aware
 
-PRODUCTS = ("creator", "studio", *PACKS, "don")
+PRODUCTS = ("creator", "studio", "pack", "don")
 
 
 @dataclass
@@ -56,9 +56,8 @@ async def apply_event(session: AsyncSession, event: PaymentEvent) -> bool:
                         product=event.product, amount=event.amount, currency=event.currency))
     if event.product == "don":
         pass   # un don soutient la plateforme : rien à créditer, le paiement est seulement enregistré
-    elif event.product in PACKS:
-        pack = PACKS[event.product]
-        await usage.grant(session, event.user_id, pack.credits, "pack", f"pack de {pack.credits} crédits")
+    elif event.product == "pack":
+        await usage.grant(session, event.user_id, PACK_CREDITS, "pack", "pack de crédits")
     else:
         plan = PLANS[event.product]
         sub = await session.get(Subscription, event.user_id)
