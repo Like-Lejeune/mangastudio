@@ -29,12 +29,7 @@ from app.models import (
     now,
 )
 from app.plans import PLANS
-from app.routers.episodes import (
-    abandon_episode,
-    delete_episode,
-    delete_series,
-    episode_out,
-)
+from app.routers.episodes import episode_out
 from app.schemas import AdminCreditsIn, AdminPlanIn, AdminRoleIn, AdminStatusIn
 from app.security import admin_user
 from app.services import aware, current_plan
@@ -384,44 +379,6 @@ async def episode_detail(episode_id: str, session: AsyncSession = Depends(get_se
             "cost_usd": sum((c or 0) for *_, c in cost) / 1e6,
             "moderation_events": [{"id": m.id, "checkpoint": m.checkpoint, "action": m.action, "rule": m.rule, "excerpt": m.excerpt,
                                    "created_at": iso(m.created_at)} for m in mods]}
-
-
-@router.post("/episodes/{episode_id}/abandon")
-async def admin_abandon(episode_id: str, admin: User = Depends(admin_user), session: AsyncSession = Depends(get_session)):
-    """Débloque un auteur : l'épisode interrompu ou refusé est abandonné, la réserve restante lui est rendue."""
-    e = (await session.execute(select(Episode).where(Episode.id == episode_id).options(selectinload(Episode.series)))).scalar_one_or_none()
-    if not e:
-        raise HTTPException(404, "Épisode introuvable.")
-    await abandon_episode(session, e)
-    log(session, admin, "episode_abandon", "episode", e.id, f"Épisode n° {e.number} de « {e.series.title} » abandonné pour débloquer l'auteur")
-    await session.commit()
-    return {"id": e.id, "status": e.status}
-
-
-@router.delete("/episodes/{episode_id}")
-async def admin_delete_episode(episode_id: str, admin: User = Depends(admin_user), session: AsyncSession = Depends(get_session)):
-    """Efface un épisode abandonné (pages et images). Les coûts IA et les mouvements de crédits restent dans l'historique."""
-    e = (await session.execute(select(Episode).where(Episode.id == episode_id).options(selectinload(Episode.series)))).scalar_one_or_none()
-    if not e:
-        raise HTTPException(404, "Épisode introuvable.")
-    title, owner = e.series.title, e.series.owner_id
-    number = await delete_episode(session, e)
-    log(session, admin, "episode_delete", "user", owner, f"Épisode n° {number} de « {title} » supprimé définitivement")
-    await session.commit()
-    return {"deleted": True}
-
-
-@router.delete("/series/{series_id}")
-async def admin_delete_series(series_id: str, admin: User = Depends(admin_user), session: AsyncSession = Depends(get_session)):
-    """Supprime une série entière (signalement, demande de l'auteur…). Notée dans le journal."""
-    s = (await session.execute(select(Series).where(Series.id == series_id).options(selectinload(Series.episodes)))).scalar_one_or_none()
-    if not s:
-        raise HTTPException(404, "Série introuvable.")
-    owner = s.owner_id
-    res = await delete_series(session, s)
-    log(session, admin, "series_delete", "user", owner, f"Série « {res['title'] or 'sans titre'} » supprimée ({res['episodes']} épisode(s))")
-    await session.commit()
-    return res
 
 
 # ─── Paiements ────────────────────────────────────────────────────────────────

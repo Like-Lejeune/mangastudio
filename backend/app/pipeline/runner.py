@@ -35,20 +35,6 @@ class Blocked(Exception):
     """La modération a arrêté l'épisode."""
 
 
-def folder(episode: Episode) -> str:
-    """Dossier des pages d'un épisode. L'identifiant évite qu'un épisode supprimé puis refait sous le même numéro
-    partage ses adresses d'images (et le cache des navigateurs) avec l'ancien."""
-    return f"ep{episode.number}-{episode.id[:8]}"
-
-
-def refused_message(names: list[str]) -> str:
-    qui = " et ".join(f"« {n} »" for n in names)
-    return (f"Le dessinateur IA refuse de dessiner {qui}. C'est presque toujours parce que le nom ou l'apparence "
-            "ressemble à un personnage existant (protégé par le droit d'auteur), ou à un contenu interdit. "
-            "Modifiez ce personnage depuis la page de la série (autre nom, autre apparence), puis lancez un nouvel épisode. "
-            "Les crédits non utilisés vous ont été rendus.")
-
-
 def _mime(path: str) -> str:
     return MIME.get(path.rsplit(".", 1)[-1], "image/png")
 
@@ -98,10 +84,6 @@ async def run_episode(episode_id: str, studio: Studio | None = None) -> None:
                 status, error = "failed", f"Pages à refaire : {', '.join(map(str, failed))}."
         except Blocked as e:
             status, error = "blocked", str(e)
-        except ContentBlocked:
-            log.warning("épisode %s refusé par le filtre du fournisseur", episode_id)
-            status, error = "blocked", ("Le dessinateur IA a refusé une image de cet épisode (personnage ou scène trop proche d'une "
-                                        "œuvre existante, ou contenu interdit). Modifiez la série ou les personnages, puis lancez un nouvel épisode.")
         except Exception as e:  # noqa: BLE001  (toute panne doit laisser l'épisode dans un état lisible)
             log.exception("épisode %s", episode_id)
             status, error = "failed", f"La génération s'est interrompue ({type(e).__name__}). Vous pouvez la reprendre."
@@ -186,30 +168,14 @@ async def _run(session: AsyncSession, episode: Episode, studio: Studio, user_id:
 
     async def sheet(c: Character):
         refs = [(await storage.load(c.photo_path), _mime(c.photo_path))] if c.photo_path else []
+        info = {"name": c.name, "look": c.look}
         async with sem:
-            try:
-                prompt = prompts.sheet_prompt({"name": c.name, "look": c.look}, series.style, series.palette, bool(refs))
-                return c, await _draw(studio, prompt, refs, "1536x1024")
-            except ContentBlocked:
-                # Un nom connu suffit souvent à déclencher le filtre : dernier essai sans le nom.
-                prompt = prompts.sheet_prompt({"name": "an original character", "look": c.look}, series.style, series.palette, bool(refs))
-                try:
-                    return c, await _draw(studio, prompt, refs, "1536x1024")
-                except ContentBlocked:
-                    return c, None
+            return c, await _draw(studio, prompts.sheet_prompt(info, series.style, series.palette, bool(refs)), refs, "1536x1024")
 
-    refused = []
     for c, result in await asyncio.gather(*(sheet(c) for c in cast if not c.sheet_path)):
-        if result is None:
-            refused.append(c.name)
-            moderation.log(session, user_id=user_id, episode_id=episode.id, checkpoint="image", action="block",
-                           rule="fiche refusée par le dessinateur", excerpt=f"{c.name} : {c.look}"[:500])
-            continue
         c.sheet_path = await storage.save(f"series/{series.id}/sheets/{c.slug}", result.image, result.mime)
         record("sheet", studio.artist, studio.artist_model, result.usage)
     await session.commit()
-    if refused:
-        raise Blocked(refused_message(refused))
 
     sheets = {c.slug: (await storage.load(c.sheet_path), _mime(c.sheet_path)) for c in cast}
     names = {c.slug: c.name for c in cast}
@@ -250,7 +216,7 @@ async def _run(session: AsyncSession, episode: Episode, studio: Studio, user_id:
                 image, note = None, f"Dessin impossible ({type(e).__name__})."
         async with lock:
             if image and not forbidden:
-                row.image_path = await storage.save(f"series/{series.id}/{folder(episode)}/page-{row.number}", image.image, image.mime)
+                row.image_path = await storage.save(f"series/{series.id}/ep{episode.number}/page-{row.number}", image.image, image.mime)
                 row.status = "done"
             else:
                 row.status = "failed"
@@ -283,8 +249,7 @@ async def _write_script(session, episode: Episode, series: Series, cast: list[Ch
     max_per_page = max(1, min(studio.max_refs, len(slugs)))
     previous = (await session.execute(
         select(Episode.number, Episode.title, Episode.summary)
-        .where(Episode.series_id == series.id, Episode.number < episode.number, Episode.script.is_not(None),
-               Episode.status == "done")
+        .where(Episode.series_id == series.id, Episode.number < episode.number, Episode.script.is_not(None))
         .order_by(Episode.number.desc()).limit(8)
     )).all()
     context = prompts.story_context(
@@ -378,8 +343,6 @@ async def redraw_page(page_id: str, note: str, studio: Studio | None = None) -> 
     studio = studio or get_studio()
     async with SessionLocal() as session:
         row = await session.get(Page, page_id)
-        if row is None:          # épisode ou série supprimés entre-temps
-            return
         episode = await _load(session, row.episode_id)
         series, script = episode.series, episode.script
         cast = [ec.character for ec in episode.cast]
@@ -389,7 +352,7 @@ async def redraw_page(page_id: str, note: str, studio: Studio | None = None) -> 
         refs = [(await storage.load(c.sheet_path), _mime(c.sheet_path)) for slug in order for c in cast if c.slug == slug and c.sheet_path]
         try:
             image = await _draw(studio, prompts.page_prompt(script, spec, names, order, series.style, series.palette, series.language, note[:300]), refs)
-            row.image_path = await storage.save(f"series/{series.id}/{folder(episode)}/page-{row.number}-r{row.attempts + 1}", image.image, image.mime)
+            row.image_path = await storage.save(f"series/{series.id}/ep{episode.number}/page-{row.number}-r{row.attempts + 1}", image.image, image.mime)
             was_done = row.status == "done"
             row.status, row.attempts, row.editor_note = "done", row.attempts + 1, note[:300]
             # Page déjà livrée : le redessin compte comme une image de plus ; page ratée : il devient la page livrée.
