@@ -35,6 +35,12 @@ class Blocked(Exception):
     """La modération a arrêté l'épisode."""
 
 
+def folder(episode: Episode) -> str:
+    """Dossier des pages d'un épisode. L'identifiant évite qu'un épisode supprimé puis refait sous le même numéro
+    partage ses adresses d'images (et le cache des navigateurs) avec l'ancien."""
+    return f"ep{episode.number}-{episode.id[:8]}"
+
+
 def refused_message(names: list[str]) -> str:
     qui = " et ".join(f"« {n} »" for n in names)
     return (f"Le dessinateur IA refuse de dessiner {qui}. C'est presque toujours parce que le nom ou l'apparence "
@@ -244,7 +250,7 @@ async def _run(session: AsyncSession, episode: Episode, studio: Studio, user_id:
                 image, note = None, f"Dessin impossible ({type(e).__name__})."
         async with lock:
             if image and not forbidden:
-                row.image_path = await storage.save(f"series/{series.id}/ep{episode.number}/page-{row.number}", image.image, image.mime)
+                row.image_path = await storage.save(f"series/{series.id}/{folder(episode)}/page-{row.number}", image.image, image.mime)
                 row.status = "done"
             else:
                 row.status = "failed"
@@ -277,7 +283,8 @@ async def _write_script(session, episode: Episode, series: Series, cast: list[Ch
     max_per_page = max(1, min(studio.max_refs, len(slugs)))
     previous = (await session.execute(
         select(Episode.number, Episode.title, Episode.summary)
-        .where(Episode.series_id == series.id, Episode.number < episode.number, Episode.script.is_not(None))
+        .where(Episode.series_id == series.id, Episode.number < episode.number, Episode.script.is_not(None),
+               Episode.status == "done")
         .order_by(Episode.number.desc()).limit(8)
     )).all()
     context = prompts.story_context(
@@ -380,7 +387,7 @@ async def redraw_page(page_id: str, note: str, studio: Studio | None = None) -> 
         refs = [(await storage.load(c.sheet_path), _mime(c.sheet_path)) for slug in order for c in cast if c.slug == slug and c.sheet_path]
         try:
             image = await _draw(studio, prompts.page_prompt(script, spec, names, order, series.style, series.palette, series.language, note[:300]), refs)
-            row.image_path = await storage.save(f"series/{series.id}/ep{episode.number}/page-{row.number}-r{row.attempts + 1}", image.image, image.mime)
+            row.image_path = await storage.save(f"series/{series.id}/{folder(episode)}/page-{row.number}-r{row.attempts + 1}", image.image, image.mime)
             was_done = row.status == "done"
             row.status, row.attempts, row.editor_note = "done", row.attempts + 1, note[:300]
             # Page déjà livrée : le redessin compte comme une image de plus ; page ratée : il devient la page livrée.

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ACTIVE, type Episode } from "@/lib/api";
 import { CHECKPOINT_LABEL, dateTime, num, usd, type ModerationEvent } from "@/lib/admin";
@@ -27,6 +27,11 @@ function EpisodeAdminPage() {
     mutationFn: () => api(`/admin/episodes/${id}/abandon`, { method: "POST" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin"] }),
   });
+  const navigate = useNavigate();
+  const effacer = useMutation({
+    mutationFn: () => api(`/admin/episodes/${id}`, { method: "DELETE" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin"] }); navigate({ to: "/admin/episodes" }); },
+  });
   if (isLoading) return <p className="text-encre-douce">Chargement de l'épisode…</p>;
   if (error || !e) return <ErrorNote error={error ?? new Error("Épisode introuvable.")} />;
   const u = e.usage;
@@ -43,6 +48,17 @@ function EpisodeAdminPage() {
         {e.owner ? <Link to="/admin/utilisateurs/$id" params={{ id: e.owner.id }} className="font-bold text-indigo underline">{e.owner.email}</Link> : "un compte supprimé"}
       </p>
       {e.error && <p role="alert" className="mt-4 rounded-[4px] border-2 border-alerte bg-bulle p-3 font-medium text-alerte">{e.error}</p>}
+      {e.status === "canceled" && (
+        <div className="mt-4 rounded-[4px] border-2 border-encre bg-bulle p-4">
+          <p className="text-[14px] leading-5 text-encre-douce">
+            Épisode abandonné. Le supprimer efface ses pages et son scénario ; ses coûts IA et les mouvements de crédits restent dans l'historique.
+          </p>
+          <Button className="mt-3" disabled={effacer.isPending} onClick={() => { if (confirm("Supprimer définitivement cet épisode ?")) effacer.mutate(); }}>
+            Supprimer définitivement
+          </Button>
+          <ErrorNote error={effacer.error} />
+        </div>
+      )}
       {(e.status === "failed" || e.status === "blocked") && (
         <div className="mt-4 rounded-[4px] border-2 border-encre bg-bulle p-4">
           <p className="text-[14px] leading-5 text-encre-douce">

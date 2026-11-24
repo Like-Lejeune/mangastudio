@@ -1,13 +1,13 @@
 """Épisodes : lancement (admission), suivi, compteur d'usage, reprise, redessin."""
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app import budget, storage, usage
 from app.config import get_settings
 from app.db import get_session
-from app.models import Episode, EpisodeCharacter, Page, Series, User
+from app.models import Episode, EpisodeCharacter, Page, Publication, Series, User
 from app.pipeline.runner import delivered_images, remaining_images
 from app.plans import MIN_PAGES
 from app.queue import enqueue
@@ -130,6 +130,33 @@ async def abandon_episode(session: AsyncSession, e: Episode) -> None:
         raise HTTPException(409, "Seul un épisode interrompu ou refusé peut être abandonné.")
     e.status = "canceled"
     await usage.settle(session, e.series.owner_id, e.id, await delivered_images(session, e.id))
+
+
+async def delete_episode(session: AsyncSession, e: Episode) -> int:
+    """Supprime pour de bon un épisode abandonné : pages, images, distribution et publication.
+    Son numéro redevient libre s'il était le dernier ; l'historique des crédits et des coûts IA est conservé."""
+    if e.status != "canceled":
+        raise HTTPException(409, "Abandonnez d'abord l'épisode : seul un épisode abandonné peut être supprimé.")
+    await usage.settle(session, e.series.owner_id, e.id, await delivered_images(session, e.id))   # rien ne reste réservé
+    pages = (await session.execute(select(Page).where(Page.episode_id == e.id))).scalars().all()
+    files = [p.image_path for p in pages if p.image_path]
+    number = e.number
+    await session.execute(delete(Publication).where(Publication.episode_id == e.id))
+    await session.execute(delete(EpisodeCharacter).where(EpisodeCharacter.episode_id == e.id))
+    await session.execute(delete(Page).where(Page.episode_id == e.id))
+    await session.execute(delete(Episode).where(Episode.id == e.id))
+    await storage.remove_folders(files)
+    return number
+
+
+@router.delete("/episodes/{episode_id}")
+async def remove_episode(episode_id: str, user: User = Depends(verified_user), session: AsyncSession = Depends(get_session)):
+    """L'auteur efface un épisode abandonné pour repartir de zéro."""
+    e = await owned_episode(session, user, episode_id)
+    series_id = e.series_id
+    await delete_episode(session, e)
+    await session.commit()
+    return {"deleted": True, "series_id": series_id}
 
 
 @router.post("/episodes/{episode_id}/abandon")

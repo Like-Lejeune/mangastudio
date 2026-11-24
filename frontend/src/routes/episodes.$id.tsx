@@ -1,7 +1,7 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Loader, Maximize2, RotateCcw, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Loader, Maximize2, RotateCcw, Trash2, X } from "lucide-react";
 import { api, ACTIVE, STATUS_LABEL, type Episode } from "@/lib/api";
 import { useMe } from "@/lib/session";
 import { btnClass, Button, Card, Container, ErrorNote, Field, PageTitle, Pill, RequireAuth, Textarea } from "@/components/ink";
@@ -61,6 +61,15 @@ function EpisodePage() {
   const abandon = useMutation({
     mutationFn: () => api(`/episodes/${id}/abandon`, { method: "POST" }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["episode", id] }); qc.invalidateQueries({ queryKey: ["series"] }); qc.invalidateQueries({ queryKey: ["me"] }); },
+  });
+  const navigate = useNavigate();
+  const effacer = useMutation({
+    mutationFn: () => api<{ series_id: string }>(`/episodes/${id}`, { method: "DELETE" }),
+    onSuccess: (r) => {
+      qc.removeQueries({ queryKey: ["episode", id] });
+      qc.invalidateQueries({ queryKey: ["series"] });
+      navigate({ to: "/series/$id", params: { id: String(r.series_id) } });
+    },
   });
   const resume = useMutation({
     mutationFn: () => api(`/episodes/${id}/resume`, { method: "POST" }),
@@ -128,7 +137,18 @@ function EpisodePage() {
       )}
       {ep.status === "canceled" && (
         <Card className="mb-8"><p className="font-bold">Épisode abandonné.</p>
-          <p className="mt-2 text-encre-douce">Les crédits non utilisés vous ont été rendus. Vous pouvez lancer un nouvel épisode depuis la page de la série.</p>
+          <p className="mt-2 text-encre-douce">
+            Les crédits non utilisés vous ont été rendus. Pour repartir de zéro, supprimez-le : ses pages et son scénario disparaissent,
+            il n'influence plus la suite de l'histoire, et le prochain épisode reprendra son numéro.
+          </p>
+          <ErrorNote error={effacer.error} />
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Button variant="primary" disabled={effacer.isPending}
+              onClick={() => { if (confirm("Supprimer définitivement cet épisode ? Ses pages et son scénario seront effacés. Cette action est irréversible.")) effacer.mutate(); }}>
+              <Trash2 size={20} strokeWidth={2} aria-hidden />{effacer.isPending ? "Suppression…" : "Supprimer définitivement"}
+            </Button>
+            {ep.series_id && <Link to="/series/$id" params={{ id: String(ep.series_id) }} className={btnClass()}>Retour à la série</Link>}
+          </div>
         </Card>
       )}
 

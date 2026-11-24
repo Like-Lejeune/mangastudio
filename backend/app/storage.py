@@ -1,6 +1,7 @@
 """Stockage des images. Disque local ici ; remplacer par S3/R2 en production
 en gardant les trois mêmes fonctions."""
 import asyncio
+import shutil
 from pathlib import Path
 
 from app.config import get_settings
@@ -25,6 +26,14 @@ async def save(key: str, data: bytes, mime: str) -> str:
 
 async def load(rel: str) -> bytes:
     return await asyncio.to_thread((_root() / rel).read_bytes)
+
+
+async def remove_folders(rels: list[str]) -> None:
+    """Supprime les dossiers qui contiennent ces fichiers (anciennes versions comprises), sans erreur s'ils n'existent plus."""
+    root = _root().resolve()
+    for folder in {(root / rel).parent.resolve() for rel in rels}:
+        if folder != root and root in folder.parents:      # jamais hors du stockage, jamais sa racine
+            await asyncio.to_thread(shutil.rmtree, folder, True)
 
 
 def url(rel: str | None) -> str | None:

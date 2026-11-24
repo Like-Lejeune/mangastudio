@@ -29,7 +29,7 @@ from app.models import (
     now,
 )
 from app.plans import PLANS
-from app.routers.episodes import abandon_episode, episode_out
+from app.routers.episodes import abandon_episode, delete_episode, episode_out
 from app.schemas import AdminCreditsIn, AdminPlanIn, AdminRoleIn, AdminStatusIn
 from app.security import admin_user
 from app.services import aware, current_plan
@@ -391,6 +391,19 @@ async def admin_abandon(episode_id: str, admin: User = Depends(admin_user), sess
     log(session, admin, "episode_abandon", "episode", e.id, f"Épisode n° {e.number} de « {e.series.title} » abandonné pour débloquer l'auteur")
     await session.commit()
     return {"id": e.id, "status": e.status}
+
+
+@router.delete("/episodes/{episode_id}")
+async def admin_delete_episode(episode_id: str, admin: User = Depends(admin_user), session: AsyncSession = Depends(get_session)):
+    """Efface un épisode abandonné (pages et images). Les coûts IA et les mouvements de crédits restent dans l'historique."""
+    e = (await session.execute(select(Episode).where(Episode.id == episode_id).options(selectinload(Episode.series)))).scalar_one_or_none()
+    if not e:
+        raise HTTPException(404, "Épisode introuvable.")
+    title, owner = e.series.title, e.series.owner_id
+    number = await delete_episode(session, e)
+    log(session, admin, "episode_delete", "user", owner, f"Épisode n° {number} de « {title} » supprimé définitivement")
+    await session.commit()
+    return {"deleted": True}
 
 
 # ─── Paiements ────────────────────────────────────────────────────────────────
