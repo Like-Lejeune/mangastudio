@@ -36,5 +36,13 @@ async def remove_folders(rels: list[str]) -> None:
             await asyncio.to_thread(shutil.rmtree, folder, True)
 
 
+async def remove_prefix(key: str) -> None:
+    """Supprime tout un dossier du stockage (ex. « series/<id> »), sans erreur s'il n'existe pas."""
+    root = _root().resolve()
+    folder = (root / key).resolve()
+    if folder != root and root in folder.parents:
+        await asyncio.to_thread(shutil.rmtree, folder, True)
+
+
 def url(rel: str | None) -> str | None:
     return f"{get_settings().public_base_url}/files/{rel}" if rel else None

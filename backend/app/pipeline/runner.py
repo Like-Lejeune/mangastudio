@@ -378,6 +378,8 @@ async def redraw_page(page_id: str, note: str, studio: Studio | None = None) -> 
     studio = studio or get_studio()
     async with SessionLocal() as session:
         row = await session.get(Page, page_id)
+        if row is None:          # épisode ou série supprimés entre-temps
+            return
         episode = await _load(session, row.episode_id)
         series, script = episode.series, episode.script
         cast = [ec.character for ec in episode.cast]

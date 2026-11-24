@@ -64,6 +64,6 @@ export const PLAN_LABEL: Record<string, string> = { free: "Découverte", creator
 export const KIND_LABEL: Record<string, string> = { grant: "Attribution", reserve: "Réserve", refund: "Remboursement", expire: "Retrait ou expiration" };
 export const CHECKPOINT_LABEL: Record<string, string> = { input: "Saisie", script: "Scénario", image: "Image" };
 export const ACTION_LABEL: Record<string, string> = {
-  credits: "Crédits", plan: "Plan", suspend: "Suspension", reactivate: "Réactivation", role: "Rôle", term: "Mot bloqué", scene_rule: "Scène interdite", budget_alert: "Alerte budget IA", testimonial: "Avis", verify_email: "Adresse confirmée", referral: "Parrainage", publication: "Publication", episode_abandon: "Épisode abandonné", episode_delete: "Épisode supprimé",
+  credits: "Crédits", plan: "Plan", suspend: "Suspension", reactivate: "Réactivation", role: "Rôle", term: "Mot bloqué", scene_rule: "Scène interdite", budget_alert: "Alerte budget IA", testimonial: "Avis", verify_email: "Adresse confirmée", referral: "Parrainage", publication: "Publication", episode_abandon: "Épisode abandonné", episode_delete: "Épisode supprimé", series_delete: "Série supprimée",
 };
 export const INTENT_LABEL: Record<string, string> = { pending: "En attente", paid: "Payé", failed: "Échoué" };

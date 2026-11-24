@@ -32,6 +32,10 @@ function EpisodeAdminPage() {
     mutationFn: () => api(`/admin/episodes/${id}`, { method: "DELETE" }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin"] }); navigate({ to: "/admin/episodes" }); },
   });
+  const effacerSerie = useMutation({
+    mutationFn: (sid: string) => api(`/admin/series/${sid}`, { method: "DELETE" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin"] }); navigate({ to: "/admin/episodes" }); },
+  });
   if (isLoading) return <p className="text-encre-douce">Chargement de l'épisode…</p>;
   if (error || !e) return <ErrorNote error={error ?? new Error("Épisode introuvable.")} />;
   const u = e.usage;
@@ -132,6 +136,18 @@ function EpisodeAdminPage() {
           {e.summary && <><p className="label-caps mt-4">Résumé écrit</p><p className="mt-1">{e.summary}</p></>}
         </div>
       </Section>
+      <section className="mt-12 border-t-2 border-encre pt-6">
+        <h3 className="font-display text-[20px] leading-[26px]">Supprimer toute la série</h3>
+        <p className="mt-1 max-w-3xl text-[14px] leading-5 text-encre-douce">
+          À réserver aux signalements ou aux demandes de l'auteur : la série, ses personnages, tous ses épisodes et ses publications sont effacés.
+          Les coûts IA et les mouvements de crédits restent dans l'historique. L'action est notée dans le journal.
+        </p>
+        <Button className="mt-3" disabled={effacerSerie.isPending || ACTIVE.includes(e.status)}
+          onClick={() => { if (confirm(`Supprimer définitivement la série « ${e.series_title || "sans titre"} » et tous ses épisodes ?`)) effacerSerie.mutate(String(e.series_id)); }}>
+          Supprimer la série
+        </Button>
+        <ErrorNote error={effacerSerie.error} />
+      </section>
     </>
   );
 }

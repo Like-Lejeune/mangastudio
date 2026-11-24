@@ -7,7 +7,16 @@ from sqlalchemy.orm import selectinload
 from app import budget, storage, usage
 from app.config import get_settings
 from app.db import get_session
-from app.models import Episode, EpisodeCharacter, Page, Publication, Series, User
+from app.models import (
+    Character,
+    Episode,
+    EpisodeCharacter,
+    Like,
+    Page,
+    Publication,
+    Series,
+    User,
+)
 from app.pipeline.runner import delivered_images, remaining_images
 from app.plans import MIN_PAGES
 from app.queue import enqueue
@@ -147,6 +156,37 @@ async def delete_episode(session: AsyncSession, e: Episode) -> int:
     await session.execute(delete(Episode).where(Episode.id == e.id))
     await storage.remove_folders(files)
     return number
+
+
+async def delete_series(session: AsyncSession, series: Series) -> dict:
+    """Supprime une série entière : personnages, épisodes, pages, images, publications et leurs « j'aime ».
+    Refusé tant qu'un épisode est en cours. Les crédits encore réservés sont rendus ; l'historique
+    des crédits et des coûts IA est conservé (comptabilité)."""
+    if any(e.status in RUNNING for e in series.episodes):
+        raise HTTPException(409, "Un épisode est en cours de création : attendez qu'il se termine avant de supprimer la série.")
+    ids = [e.id for e in series.episodes]
+    for eid in ids:
+        await usage.settle(session, series.owner_id, eid, await delivered_images(session, eid))
+    if ids:
+        pubs = select(Publication.id).where(Publication.episode_id.in_(ids))
+        await session.execute(delete(Like).where(Like.publication_id.in_(pubs)))
+        await session.execute(delete(Publication).where(Publication.episode_id.in_(ids)))
+        await session.execute(delete(EpisodeCharacter).where(EpisodeCharacter.episode_id.in_(ids)))
+        await session.execute(delete(Page).where(Page.episode_id.in_(ids)))
+        await session.execute(delete(Episode).where(Episode.id.in_(ids)))
+    await session.execute(delete(Character).where(Character.series_id == series.id))
+    await session.execute(delete(Series).where(Series.id == series.id))
+    await storage.remove_prefix(f"series/{series.id}")
+    return {"deleted": True, "episodes": len(ids), "title": series.title}
+
+
+@router.delete("/series/{series_id}")
+async def remove_series(series_id: str, user: User = Depends(verified_user), session: AsyncSession = Depends(get_session)):
+    """L'auteur supprime toute une histoire, définitivement."""
+    series = await owned_series(session, user, series_id)
+    res = await delete_series(session, series)
+    await session.commit()
+    return res
 
 
 @router.delete("/episodes/{episode_id}")

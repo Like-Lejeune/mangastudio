@@ -29,7 +29,12 @@ from app.models import (
     now,
 )
 from app.plans import PLANS
-from app.routers.episodes import abandon_episode, delete_episode, episode_out
+from app.routers.episodes import (
+    abandon_episode,
+    delete_episode,
+    delete_series,
+    episode_out,
+)
 from app.schemas import AdminCreditsIn, AdminPlanIn, AdminRoleIn, AdminStatusIn
 from app.security import admin_user
 from app.services import aware, current_plan
@@ -404,6 +409,19 @@ async def admin_delete_episode(episode_id: str, admin: User = Depends(admin_user
     log(session, admin, "episode_delete", "user", owner, f"Épisode n° {number} de « {title} » supprimé définitivement")
     await session.commit()
     return {"deleted": True}
+
+
+@router.delete("/series/{series_id}")
+async def admin_delete_series(series_id: str, admin: User = Depends(admin_user), session: AsyncSession = Depends(get_session)):
+    """Supprime une série entière (signalement, demande de l'auteur…). Notée dans le journal."""
+    s = (await session.execute(select(Series).where(Series.id == series_id).options(selectinload(Series.episodes)))).scalar_one_or_none()
+    if not s:
+        raise HTTPException(404, "Série introuvable.")
+    owner = s.owner_id
+    res = await delete_series(session, s)
+    log(session, admin, "series_delete", "user", owner, f"Série « {res['title'] or 'sans titre'} » supprimée ({res['episodes']} épisode(s))")
+    await session.commit()
+    return res
 
 
 # ─── Paiements ────────────────────────────────────────────────────────────────

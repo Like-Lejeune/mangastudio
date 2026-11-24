@@ -148,3 +148,62 @@ async def test_suppression_episode_abandonne(client, admin):  # noqa: F811
     # Côté administration : même règle, et l'action est notée.
     await client.post(f"/admin/episodes/{ep2['id']}/abandon", headers=admin)    # refusé : l'épisode est terminé
     assert (await client.delete(f"/admin/episodes/{ep2['id']}", headers=admin)).status_code == 409
+
+
+async def test_suppression_serie_complete(client, admin):  # noqa: F811
+    """Toute une histoire s'efface : personnages, épisodes, images, publication et « j'aime » ; l'historique comptable reste."""
+    from pathlib import Path
+
+    from sqlalchemy import func, select
+
+    from app.config import get_settings
+    from app.db import SessionLocal
+    from app.models import (
+        Character,
+        Episode,
+        Like,
+        Page,
+        Publication,
+        Series,
+        UsageEvent,
+    )
+
+    h = await account(client, "serie.efface@test.cm")
+    sid = (await client.post("/series", headers=h, json={"premise": "Une marchande de Mokolo."})).json()["id"]
+    cid = (await client.post(f"/series/{sid}/characters", headers=h, json={"name": "Mama Rose"})).json()["id"]
+    eid = (await client.post(f"/series/{sid}/episodes", headers=h, json={"page_count": 4, "character_ids": [cid]})).json()["id"]
+    ep = await wait_done(client, h, eid)
+    assert ep["status"] == "done"
+    pid = (await client.post(f"/episodes/{eid}/publication", headers=h, json={"accept_terms": True})).json()["id"]
+    await client.post(f"/admin/publications/{pid}", headers=admin, json={"action": "approve"})
+    lecteur = await account(client, "lecteur.serie@test.cm")
+    await client.post(f"/gallery/{pid}/like", headers=lecteur)
+    dossier = Path(get_settings().storage_dir) / "series" / sid
+    assert dossier.exists()
+    credits = (await client.get("/me", headers=h)).json()["credits"]
+
+    intrus = await account(client, "intrus.serie@test.cm")
+    assert (await client.delete(f"/series/{sid}", headers=intrus)).status_code == 404
+    r = await client.delete(f"/series/{sid}", headers=h)
+    assert r.status_code == 200 and r.json()["episodes"] == 1
+    assert (await client.get(f"/series/{sid}", headers=h)).status_code == 404
+    assert (await client.get(f"/gallery/{pid}")).status_code == 404
+    assert all(s["id"] != sid for s in (await client.get("/series", headers=h)).json())
+    assert not dossier.exists()
+    assert (await client.get("/me", headers=h)).json()["credits"] == credits
+    async with SessionLocal() as s:
+        for model, col, val in ((Series, Series.id, sid), (Character, Character.id, cid), (Episode, Episode.id, eid),
+                                (Page, Page.episode_id, eid), (Publication, Publication.id, pid), (Like, Like.publication_id, pid)):
+            assert (await s.execute(select(func.count()).select_from(model).where(col == val))).scalar_one() == 0
+        assert (await s.execute(select(func.count()).select_from(UsageEvent).where(UsageEvent.episode_id == eid))).scalar_one() > 0
+
+
+async def test_suppression_serie_admin(client, admin):  # noqa: F811
+    h = await account(client, "serie.admin@test.cm")
+    sid = (await client.post("/series", headers=h, json={"premise": "Un griot de Garoua."})).json()["id"]
+    await client.post(f"/series/{sid}/characters", headers=h, json={"name": "Baba"})
+    assert (await client.delete(f"/admin/series/{sid}", headers=h)).status_code == 403
+    assert (await client.delete(f"/admin/series/{sid}", headers=admin)).json()["deleted"] is True
+    assert (await client.get(f"/series/{sid}", headers=h)).status_code == 404
+    journal = (await client.get("/admin/actions", headers=admin)).json()["items"]
+    assert any(a["action"] == "series_delete" for a in journal)

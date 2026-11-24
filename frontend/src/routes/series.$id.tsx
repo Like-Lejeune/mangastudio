@@ -149,6 +149,7 @@ function SeriesPage() {
           {selected.length === 0 && <p className="-mt-3 text-[13px] text-encre-douce">Cochez au moins un personnage.</p>}
         </Card>
       </div>
+      <SupprimerSerie s={s} />
     </Container>
   );
 }
@@ -226,5 +227,52 @@ function EditCharacter({ seriesId, c, onClose }: { seriesId: string; c: Characte
         </div>
       </form>
     </Card>
+  );
+}
+
+/** Supprimer toute l'histoire, définitivement. On fait taper « SUPPRIMER » pour éviter l'accident. */
+function SupprimerSerie({ s }: { s: SeriesDetail }) {
+  const [ouvert, setOuvert] = useState(false);
+  const [mot, setMot] = useState("");
+  const qc = useQueryClient();
+  const nav = useNavigate();
+  const m = useMutation({
+    mutationFn: () => api(`/series/${s.id}`, { method: "DELETE" }),
+    onSuccess: () => { qc.removeQueries({ queryKey: ["series", String(s.id)] }); qc.invalidateQueries({ queryKey: ["series"] }); nav({ to: "/" }); },
+  });
+  const enCours = s.episodes.some((e) => ACTIVE.includes(e.status));
+  const n = s.episodes.length;
+  return (
+    <section className="mt-16 border-t-2 border-encre pt-8" aria-labelledby="danger">
+      <h2 id="danger" className="font-display text-[22px] leading-[28px]">Supprimer cette histoire</h2>
+      {!ouvert ? (
+        <>
+          <p className="mt-2 max-w-2xl text-encre-douce">Efface la série, ses personnages et tous ses épisodes, pour de bon.</p>
+          <Button className="mt-4" onClick={() => setOuvert(true)} disabled={enCours}>Supprimer l'histoire…</Button>
+          {enCours && <p className="mt-2 text-[13px] text-encre-douce">Impossible pendant qu'un épisode est en cours de création.</p>}
+        </>
+      ) : (
+        <form className="mt-4 max-w-2xl rounded-[4px] border-2 border-alerte bg-bulle p-5" onSubmit={(e) => { e.preventDefault(); m.mutate(); }}>
+          <p className="font-bold text-alerte">Cette action est irréversible.</p>
+          <ul className="mt-2 list-disc space-y-1 pl-6">
+            <li>{s.characters.length} personnage{s.characters.length > 1 ? "s" : ""} et {n} épisode{n > 1 ? "s" : ""} seront effacés, avec toutes leurs pages.</li>
+            <li>Les chapitres publiés disparaissent de la galerie, avec leurs « j'aime », et les liens de partage ne marcheront plus.</li>
+            <li>Les crédits déjà utilisés ne sont pas rendus ; ceux encore réservés le sont.</li>
+          </ul>
+          <div className="mt-5">
+            <Field label="Pour confirmer, tapez SUPPRIMER" htmlFor="confirm-del">
+              <Input id="confirm-del" autoComplete="off" value={mot} onChange={(e) => setMot(e.target.value)} />
+            </Field>
+          </div>
+          <ErrorNote error={m.error} />
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Button type="submit" variant="primary" disabled={mot.trim().toUpperCase() !== "SUPPRIMER" || m.isPending}>
+              {m.isPending ? "Suppression…" : "Supprimer définitivement"}
+            </Button>
+            <Button type="button" onClick={() => { setOuvert(false); setMot(""); }}>Annuler</Button>
+          </div>
+        </form>
+      )}
+    </section>
   );
 }
