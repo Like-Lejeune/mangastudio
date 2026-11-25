@@ -6,6 +6,7 @@ import { Plus } from "lucide-react";
 import { api, type SeriesItem } from "@/lib/api";
 import { useMe, useToken } from "@/lib/session";
 import { Accueil } from "@/components/accueil/Accueil";
+import { ApercuGalerie } from "@/components/galerie/ApercuGalerie";
 import { STYLES_MANGA, styleParId } from "@/content/styles";
 import { VignetteStyle } from "@/components/StyleManga";
 import { Button, Card, Container, ErrorNote, Field, PageTitle, RequireAuth, Textarea } from "@/components/ink";
@@ -134,6 +135,7 @@ function MesSeries() {
           </form>
         </Card>
       </div>
+      <ApercuGalerie />
     </Container>
   );
 }

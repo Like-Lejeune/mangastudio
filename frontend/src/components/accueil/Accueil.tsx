@@ -9,6 +9,8 @@ import { cn } from "@/lib/utils";
 import { STYLES_MANGA } from "@/content/styles";
 import { VignetteStyle } from "@/components/StyleManga";
 import { Esquisses, IconeEtape, PlancheAnimee } from "./Planche";
+import { CarteHistoire } from "@/components/galerie/CarteHistoire";
+import type { PageGalerie, TriGalerie } from "@/lib/galerie";
 
 /** Ajoute .anime quand l'élément arrive à l'écran (une seule fois). */
 function useRevele<T extends HTMLElement>() {
@@ -48,6 +50,11 @@ export function Accueil() {
   // Avis validés dans l'administration, puis ceux écrits à la main dans content/accueil.ts.
   const { data: avisEnLigne } = useQuery({ queryKey: ["avis-publics"], queryFn: () => api<(Avis & { id: string })[]>("/testimonials"), staleTime: 300_000 });
   const avis: Avis[] = [...(avisEnLigne ?? []), ...AVIS];
+  // Galerie : rien n'est affiché tant qu'aucune histoire réelle n'est publiée.
+  const galerie = (tri: TriGalerie) => ({ queryKey: ["galerie", "accueil", tri], queryFn: () => api<PageGalerie>(`/gallery?tri=${tri}&size=4`), staleTime: 300_000 });
+  const semaine = (useQuery(galerie("semaine")).data?.items ?? []).filter((c) => (c.likes_week ?? 0) > 0);
+  const coups = useQuery(galerie("coups")).data?.items ?? [];
+  const recentes = useQuery(galerie("recentes")).data?.items ?? [];
 
   return (
     <div className="overflow-x-clip">
@@ -147,6 +154,17 @@ export function Accueil() {
         </div>
       </section>
 
+      {/* ───── Galerie « À lire » ───── */}
+      {semaine.length > 0 ? (
+        <SectionGalerie sur="À lire" titre="Les plus aimées de la semaine" items={semaine} tri="semaine" />
+      ) : recentes.length > 0 && (
+        // Pas encore de « j'aime » cette semaine : on montre les dernières histoires publiées.
+        <SectionGalerie sur="À lire" titre="Les dernières histoires publiées" items={recentes} tri="recentes" />
+      )}
+      {coups.length > 0 && (
+        <SectionGalerie sur="Choisies par l'équipe" titre="Coups de cœur" items={coups} tri="coups" />
+      )}
+
       {/* ───── Avis ───── */}
       {avis.length > 0 && (
         <section className="mx-auto max-w-[1200px] px-4 pt-20 sm:px-6">
@@ -207,6 +225,18 @@ export function Accueil() {
       </section>
 
     </div>
+  );
+}
+
+function SectionGalerie({ sur, titre, items, tri }: { sur: string; titre: string; items: PageGalerie["items"]; tri: TriGalerie }) {
+  return (
+    <section className="mx-auto max-w-[1200px] px-4 pt-20 sm:px-6">
+      <Titre sur={sur} sous="Des chapitres créés par nos auteurs, à lire gratuitement.">{titre}</Titre>
+      <ul className="flex flex-wrap justify-center gap-6 [&>li]:w-full sm:[&>li]:w-[calc(50%-12px)] lg:[&>li]:w-[calc(25%-18px)]">
+        {items.map((c, i) => <Revele as="li" key={c.id} delai={i * 0.1}><CarteHistoire c={c} semaine={tri === "semaine"} /></Revele>)}
+      </ul>
+      <p className="mt-8 text-center"><Link to="/galerie" search={{ tri }} className="font-bold text-indigo underline">Voir toute la galerie</Link></p>
+    </section>
   );
 }
 
