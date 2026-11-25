@@ -3,10 +3,11 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Check, Loader, X } from "lucide-react";
 import { api, type Payment } from "@/lib/api";
 import { Button, Card, ErrorNote, Field, Input } from "@/components/ink";
+import { intlLocale, tr } from "@/lib/i18n";
 
 const POLL_MS = 3000;
 const WAIT_MAX_MS = 3 * 60 * 1000;
-export const fcfa = (n: number) => `${n.toLocaleString("fr-FR")} FCFA`;
+export const fcfa = (n: number) => `${n.toLocaleString(intlLocale())} FCFA`;
 
 export type CheckoutProduct = { id: "creator" | "studio" | "pack" | "pack15" | "pack25" | "don"; label: string; price: number };
 type Operator = { code: string; name: string };
@@ -58,25 +59,25 @@ export function MobileMoneyCheckout({ product, onClose, paidMessage }: { product
     <Card featured className="mb-8">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="label-caps">Paiement mobile money</p>
+          <p className="label-caps">{tr("Paiement mobile money", "Mobile money payment")}</p>
           <h2 className="mt-1 font-display text-[24px] leading-[30px]">{product.label} · <span className="tabular">{fcfa(product.price)}</span></h2>
         </div>
-        <button onClick={onClose} aria-label="Fermer le paiement" className="inline-flex size-11 items-center justify-center rounded-[4px] hover:bg-papier"><X size={20} strokeWidth={2} aria-hidden /></button>
+        <button onClick={onClose} aria-label={tr("Fermer le paiement", "Close payment")} className="inline-flex size-11 items-center justify-center rounded-[4px] hover:bg-papier"><X size={20} strokeWidth={2} aria-hidden /></button>
       </div>
 
       {!payment && (
         <form className="mt-6 grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end" onSubmit={(e) => { e.preventDefault(); start.mutate(); }}>
-          <Field label="Opérateur" htmlFor="operator">
+          <Field label={tr("Opérateur", "Operator")} htmlFor="operator">
             <select id="operator" required value={operator} onChange={(e) => setOperator(e.target.value)} disabled={operators.isLoading}
               className="h-12 w-full rounded-[4px] border-2 border-encre bg-blanc px-3 text-[16px] text-[#14110F]">
-              <option value="">{operators.isLoading ? "Chargement…" : "Choisir"}</option>
+              <option value="">{operators.isLoading ? tr("Chargement…", "Loading…") : tr("Choisir", "Choose")}</option>
               {operators.data?.map((o) => <option key={o.code} value={o.code}>{o.name}</option>)}
             </select>
           </Field>
-          <Field label="Numéro de téléphone" htmlFor="phone">
+          <Field label={tr("Numéro de téléphone", "Phone number")} htmlFor="phone">
             <Input id="phone" type="tel" inputMode="tel" autoComplete="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="6 99 00 00 00" />
           </Field>
-          <Button type="submit" variant="primary" disabled={start.isPending || !operator || !phoneOk}>{start.isPending ? "Envoi…" : "Payer"}</Button>
+          <Button type="submit" variant="primary" disabled={start.isPending || !operator || !phoneOk}>{start.isPending ? tr("Envoi…", "Sending…") : tr("Payer", "Pay")}</Button>
           <div className="sm:col-span-3"><ErrorNote error={operators.error ?? start.error} /></div>
         </form>
       )}
@@ -84,25 +85,25 @@ export function MobileMoneyCheckout({ product, onClose, paidMessage }: { product
       {waiting && !timedOut && (
         <div role="status" className="trame mt-6 flex items-center gap-3 rounded-[4px] border-2 border-encre p-4">
           <span className="flex items-center gap-3 rounded-[4px] border-2 border-encre bg-bulle px-3 py-2 font-bold">
-            <Loader size={20} strokeWidth={2} className="animate-spin" aria-hidden />Validez le paiement sur votre téléphone.
+            <Loader size={20} strokeWidth={2} className="animate-spin" aria-hidden />{tr("Validez le paiement sur votre téléphone.", "Confirm the payment on your phone.")}
           </span>
         </div>
       )}
       {timedOut && (
         <div className="mt-6 flex flex-wrap items-center gap-3">
-          <p className="font-bold">Paiement toujours en attente.</p>
-          <Button onClick={() => { setStartedAt(Date.now()); status.refetch(); }}>Vérifier à nouveau</Button>
+          <p className="font-bold">{tr("Paiement toujours en attente.", "Payment still pending.")}</p>
+          <Button onClick={() => { setStartedAt(Date.now()); status.refetch(); }}>{tr("Vérifier à nouveau", "Check again")}</Button>
         </div>
       )}
       {payment?.status === "paid" && (
         <p role="status" className="mt-6 flex items-center gap-2 rounded-[4px] border-2 border-succes bg-bulle p-3 font-bold text-succes">
-          <Check size={20} strokeWidth={2} aria-hidden />{paidMessage ?? "Paiement reçu. Votre solde est à jour."}
+          <Check size={20} strokeWidth={2} aria-hidden />{paidMessage ?? tr("Paiement reçu. Votre solde est à jour.", "Payment received. Your balance is up to date.")}
         </p>
       )}
       {payment?.status === "failed" && (
         <div className="mt-6 flex flex-col gap-3">
-          <ErrorNote error={new Error(payment.error || "Le paiement n'a pas abouti.")} />
-          <Button className="self-start" onClick={retry}>Réessayer</Button>
+          <ErrorNote error={new Error(payment.error || tr("Le paiement n'a pas abouti.", "The payment didn't go through."))} />
+          <Button className="self-start" onClick={retry}>{tr("Réessayer", "Try again")}</Button>
         </div>
       )}
     </Card>

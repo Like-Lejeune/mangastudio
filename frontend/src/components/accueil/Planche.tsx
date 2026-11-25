@@ -1,4 +1,5 @@
 import type { CSSProperties, SVGProps } from "react";
+import { tr } from "@/lib/i18n";
 
 /** Un trait d'encre qui se dessine : `at` = départ (s), `t` = durée (s). */
 function T({ at, t = 0.8, ...p }: SVGProps<SVGPathElement> & { at: number; t?: number }) {
@@ -31,7 +32,7 @@ const vitesse = Array.from({ length: 22 }, (_, i) => {
  */
 export function PlancheAnimee({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 400 600" className={className} role="img" aria-label="Une planche de manga qui se dessine : une ville au soleil levant, une héroïne déterminée, un impact, et la bulle « Et si ton idée devenait un manga ? »">
+    <svg viewBox="0 0 400 600" className={className} role="img" aria-label={tr("Une planche de manga qui se dessine : une ville au soleil levant, une héroïne déterminée, un impact, et la bulle « Et si ton idée devenait un manga ? »", "A manga page drawing itself: a city at sunrise, a determined heroine, an impact, and the balloon “What if your idea became a manga?”")}>
       <defs>
         <pattern id="trame" width="8" height="8" patternUnits="userSpaceOnUse">
           <circle cx="4" cy="4" r="1.6" fill="var(--encre)" />
@@ -93,8 +94,8 @@ export function PlancheAnimee({ className }: { className?: string }) {
       <g className="pop" style={delai(4.2)}>
         <path d="M200,428 C300,428 356,452 356,490 C356,528 300,552 200,552 C176,552 154,550 136,546 L84,574 L104,536 C64,526 44,510 44,490 C44,452 100,428 200,428 Z"
           fill="var(--bulle)" stroke="var(--encre)" strokeWidth="3" strokeLinejoin="round" />
-        <text x="200" y="482" textAnchor="middle" fontFamily="var(--font-display)" fontSize="22" fill="var(--encre)">Et si ton idée</text>
-        <text x="200" y="514" textAnchor="middle" fontFamily="var(--font-display)" fontSize="22" fill="var(--vermillon)">devenait un manga ?</text>
+        <text x="200" y="482" textAnchor="middle" fontFamily="var(--font-display)" fontSize="22" fill="var(--encre)">{tr("Et si ton idée", "What if your idea")}</text>
+        <text x="200" y="514" textAnchor="middle" fontFamily="var(--font-display)" fontSize="22" fill="var(--vermillon)">{tr("devenait un manga ?", "became a manga?")}</text>
       </g>
     </svg>
   );

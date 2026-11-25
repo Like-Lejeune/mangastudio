@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { CONTES_AFRIQUE, REGLEMENT_TYPE } from "@/content/concours";
+import { CONTES_AFRIQUE, REGLEMENT_TYPE, REGLEMENT_TYPE_EN } from "@/content/concours";
 import { STYLES_MANGA } from "@/content/styles";
 import type { Concours } from "@/lib/concours";
 import { Button, ErrorNote, Field, Input, Textarea } from "@/components/ink";
 
 type Lot = { rank: number; credits: number; studio_days: number };
 export type ConcoursIn = {
-  title: string; slug: string; theme: string; description: string; rules: string; style: string; new_only: boolean;
+  title: string; slug: string; theme: string; description: string; rules: string;
+  title_en: string; theme_en: string; description_en: string; rules_en: string; style: string; new_only: boolean;
   max_entries: number; prizes: Lot[]; starts_at: string; ends_at: string; visible: boolean;
 };
 
@@ -15,7 +16,8 @@ export type ConcoursIn = {
 const versChamp = (iso: string) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
 const versIso = (v: string) => new Date(v).toISOString();
 
-const VIDE = { title: "", slug: "", theme: "", description: "", rules: REGLEMENT_TYPE, style: "", new_only: true, max_entries: 1,
+const VIDE = { title: "", slug: "", theme: "", description: "", rules: REGLEMENT_TYPE,
+  title_en: "", theme_en: "", description_en: "", rules_en: REGLEMENT_TYPE_EN, style: "", new_only: true, max_entries: 1,
   prizes: [{ rank: 1, credits: 100, studio_days: 0 }], starts: "", ends: "", visible: false };
 
 export function FormulaireConcours({ initial, onSubmit, pending, error, submitLabel }: {
@@ -23,6 +25,7 @@ export function FormulaireConcours({ initial, onSubmit, pending, error, submitLa
 }) {
   const [f, setF] = useState(() => initial ? {
     title: initial.title, slug: initial.slug, theme: initial.theme, description: initial.description, rules: initial.rules,
+    title_en: initial.title_en ?? "", theme_en: initial.theme_en ?? "", description_en: initial.description_en ?? "", rules_en: initial.rules_en ?? "",
     style: initial.style, new_only: initial.new_only, max_entries: initial.max_entries,
     prizes: initial.prizes.map(({ rank, credits, studio_days }) => ({ rank, credits, studio_days })),
     starts: versChamp(initial.starts_at), ends: versChamp(initial.ends_at), visible: initial.visible,
@@ -94,6 +97,16 @@ export function FormulaireConcours({ initial, onSubmit, pending, error, submitLa
       <Field label="Règlement" htmlFor="c-rules" hint="Règlement type prérempli : à faire valider, puis à adapter (dates, lots, jury).">
         <Textarea id="c-rules" className="min-h-72 font-mono text-[13px]" maxLength={20000} value={f.rules} onChange={(e) => set("rules", e.target.value)} />
       </Field>
+      <details className="rounded-[4px] border-2 border-encre p-4" open={!!(f.title_en || f.theme_en || f.description_en)}>
+        <summary className="min-h-11 cursor-pointer font-bold">Version anglaise (facultatif)</summary>
+        <p className="mt-1 text-[13px] text-encre-douce">Montrée aux visiteurs qui ont choisi l'anglais. Un champ laissé vide affiche la version française.</p>
+        <div className="mt-4 grid gap-5">
+          <Field label="Title" htmlFor="c-title-en"><Input id="c-title-en" lang="en" maxLength={120} value={f.title_en} onChange={(e) => set("title_en", e.target.value)} /></Field>
+          <Field label="Theme, in one sentence" htmlFor="c-theme-en"><Input id="c-theme-en" lang="en" maxLength={300} value={f.theme_en} onChange={(e) => set("theme_en", e.target.value)} /></Field>
+          <Field label="Description" htmlFor="c-desc-en"><Textarea id="c-desc-en" lang="en" maxLength={4000} value={f.description_en} onChange={(e) => set("description_en", e.target.value)} /></Field>
+          <Field label="Rules" htmlFor="c-rules-en"><Textarea id="c-rules-en" lang="en" className="min-h-72 font-mono text-[13px]" maxLength={20000} value={f.rules_en} onChange={(e) => set("rules_en", e.target.value)} /></Field>
+        </div>
+      </details>
       <label className="flex cursor-pointer items-start gap-3 rounded-[4px] border-2 border-encre bg-soleil p-3">
         <input type="checkbox" className="mt-1 size-5" checked={f.visible} onChange={(e) => set("visible", e.target.checked)} />
         <span><b>Visible du public.</b> Décoché : brouillon, seule l'administration le voit.</span>

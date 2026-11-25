@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { useToken } from "@/lib/session";
 import { ErrorNote } from "@/components/ink";
 import { cn } from "@/lib/utils";
+import { tr } from "@/lib/i18n";
 
 /** « J'aime » d'une histoire publiée. Sans compte : renvoie vers la connexion. */
 export function BoutonJaime({ id, likes, liked, mine, grand }: { id: string; likes: number; liked: boolean; mine?: boolean; grand?: boolean }) {
@@ -22,13 +23,13 @@ export function BoutonJaime({ id, likes, liked, mine, grand }: { id: string; lik
 
   if (!token || mine) {
     return mine
-      ? <span className={cn(cls, "cursor-default bg-papier hover:bg-papier")} title="Vos lecteurs peuvent aimer votre histoire" aria-label={`${n} j'aime`}>{contenu}</span>
-      : <Link to="/connexion" className={cls} aria-label={`${n} j'aime. Connectez-vous pour aimer cette histoire`}>{contenu}</Link>;
+      ? <span className={cn(cls, "cursor-default bg-papier hover:bg-papier")} title={tr("Vos lecteurs peuvent aimer votre histoire", "Your readers can like your story")} aria-label={tr(`${n} j'aime`, `${n} likes`)}>{contenu}</span>
+      : <Link to="/connexion" className={cls} aria-label={tr(`${n} j'aime. Connectez-vous pour aimer cette histoire`, `${n} likes. Sign in to like this story`)}>{contenu}</Link>;
   }
   return (
     <span className="inline-flex flex-col items-start gap-2">
       <button type="button" className={cls} aria-pressed={on} disabled={m.isPending} onClick={() => m.mutate(!on)}
-        aria-label={on ? `Vous aimez cette histoire (${n}). Retirer mon j'aime` : `J'aime cette histoire (${n})`}>
+        aria-label={on ? tr(`Vous aimez cette histoire (${n}). Retirer mon j'aime`, `You like this story (${n}). Remove my like`) : tr(`J'aime cette histoire (${n})`, `Like this story (${n})`)}>
         {contenu}
       </button>
       <ErrorNote error={m.error} inline />

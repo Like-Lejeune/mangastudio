@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { PageGalerie } from "@/lib/galerie";
 import { CarteHistoire } from "./CarteHistoire";
+import { tr } from "@/lib/i18n";
 
 /** Sur « Mes séries » : les histoires de la communauté. Rien n'est affiché tant qu'aucune n'est publiée. */
 export function ApercuGalerie() {
@@ -14,8 +15,8 @@ export function ApercuGalerie() {
   return (
     <section className="mt-16" aria-labelledby="a-lire">
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="a-lire" className="font-display text-[28px] leading-[34px]">{aimees.length > 0 ? "Les plus aimées de la semaine" : "À lire sur MangaStudio"}</h2>
-        <Link to="/galerie" className="font-bold text-indigo underline">Toute la galerie</Link>
+        <h2 id="a-lire" className="font-display text-[28px] leading-[34px]">{aimees.length > 0 ? tr("Les plus aimées de la semaine", "Most liked this week") : tr("À lire sur MangaStudio", "Read on MangaStudio")}</h2>
+        <Link to="/galerie" className="font-bold text-indigo underline">{tr("Toute la galerie", "Whole gallery")}</Link>
       </div>
       <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {items.map((c) => <li key={c.id}><CarteHistoire c={c} semaine={aimees.length > 0} /></li>)}

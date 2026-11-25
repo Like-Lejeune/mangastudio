@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Check, Copy, Download, Link2, Link2Off, Share2 } from "lucide-react";
 import { api, downloadFile, type Episode } from "@/lib/api";
 import { Button, Card, ErrorNote } from "@/components/ink";
+import { tr } from "@/lib/i18n";
 
 type Quota = { limit: number | null; used: number; watermark: boolean };
 
@@ -23,7 +24,8 @@ export function PartagerChapitre({ ep }: { ep: Episode }) {
   });
 
   const url = ep.share_url ?? null;
-  const message = `Lisez mon manga « ${ep.title || `Épisode ${ep.number}`} », créé avec MangaStudio : ${url}`;
+  const nomEp = ep.title || tr(`Épisode ${ep.number}`, `Episode ${ep.number}`);
+  const message = tr(`Lisez mon manga « ${nomEp} », créé avec MangaStudio : ${url}`, `Read my manga “${nomEp}”, made with MangaStudio: ${url}`);
   const copier = async () => {
     if (!url) return;
     try { await navigator.clipboard.writeText(url); setCopie(true); setTimeout(() => setCopie(false), 2500); } catch { /* presse-papiers refusé */ }
@@ -34,31 +36,31 @@ export function PartagerChapitre({ ep }: { ep: Episode }) {
   return (
     <div className="mt-8 grid gap-6 lg:grid-cols-2">
       <Card>
-        <h2 className="flex items-center gap-2 font-display text-[22px] leading-[28px]"><Share2 size={22} strokeWidth={2} aria-hidden />Partager ce chapitre</h2>
+        <h2 className="flex items-center gap-2 font-display text-[22px] leading-[28px]"><Share2 size={22} strokeWidth={2} aria-hidden />{tr("Partager ce chapitre", "Share this chapter")}</h2>
         {!url ? (
           <>
-            <p className="mt-2 text-encre-douce">Le chapitre est privé. Créez un lien : toute personne qui l'a pourra le lire, sans compte. Vous pourrez le couper à tout moment.</p>
+            <p className="mt-2 text-encre-douce">{tr("Le chapitre est privé. Créez un lien : toute personne qui l'a pourra le lire, sans compte. Vous pourrez le couper à tout moment.", "The chapter is private. Create a link: anyone who has it can read it, without an account. You can turn it off at any time.")}</p>
             <Button variant="primary" className="mt-4" disabled={partager.isPending} onClick={() => partager.mutate(true)}>
-              <Link2 size={18} strokeWidth={2} aria-hidden />Créer le lien de partage
+              <Link2 size={18} strokeWidth={2} aria-hidden />{tr("Créer le lien de partage", "Create the share link")}
             </Button>
           </>
         ) : (
           <>
-            <p className="mt-2 text-encre-douce">Toute personne qui a ce lien peut lire le chapitre.</p>
+            <p className="mt-2 text-encre-douce">{tr("Toute personne qui a ce lien peut lire le chapitre.", "Anyone with this link can read the chapter.")}</p>
             <div className="mt-3 flex items-stretch gap-2">
-              <input readOnly value={url} aria-label="Lien de partage" onFocus={(e) => e.currentTarget.select()}
+              <input readOnly value={url} aria-label={tr("Lien de partage", "Share link")} onFocus={(e) => e.currentTarget.select()}
                 className="tabular min-w-0 flex-1 rounded-[4px] border-2 border-encre bg-blanc px-3 text-[14px]" />
-              <Button onClick={copier} aria-label="Copier le lien">{copie ? <Check size={18} strokeWidth={2} aria-hidden /> : <Copy size={18} strokeWidth={2} aria-hidden />}{copie ? "Copié" : "Copier"}</Button>
+              <Button onClick={copier} aria-label={tr("Copier le lien", "Copy the link")}>{copie ? <Check size={18} strokeWidth={2} aria-hidden /> : <Copy size={18} strokeWidth={2} aria-hidden />}{copie ? tr("Copié", "Copied") : tr("Copier", "Copy")}</Button>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <a href={`https://wa.me/?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer"
                 className="inline-flex min-h-11 items-center rounded-[4px] border-2 border-encre bg-[#25D366] px-4 font-bold text-encre">WhatsApp</a>
               <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`} target="_blank" rel="noreferrer"
                 className="inline-flex min-h-11 items-center rounded-[4px] border-2 border-encre bg-[#1877F2] px-4 font-bold text-white">Facebook</a>
-              {natif && <Button onClick={() => navigator.share({ title: ep.title || `Épisode ${ep.number}`, text: message, url }).catch(() => {})}>Autres…</Button>}
+              {natif && <Button onClick={() => navigator.share({ title: nomEp, text: message, url }).catch(() => {})}>{tr("Autres…", "More…")}</Button>}
             </div>
             <button className="mt-4 inline-flex min-h-11 items-center gap-2 text-[14px] font-bold text-alerte underline" disabled={partager.isPending} onClick={() => partager.mutate(false)}>
-              <Link2Off size={16} strokeWidth={2} aria-hidden />Couper le lien (il ne marchera plus)
+              <Link2Off size={16} strokeWidth={2} aria-hidden />{tr("Couper le lien (il ne marchera plus)", "Turn off the link (it will stop working)")}
             </button>
           </>
         )}
@@ -66,20 +68,20 @@ export function PartagerChapitre({ ep }: { ep: Episode }) {
       </Card>
 
       <Card>
-        <h2 className="flex items-center gap-2 font-display text-[22px] leading-[28px]"><Download size={22} strokeWidth={2} aria-hidden />Télécharger en PDF</h2>
+        <h2 className="flex items-center gap-2 font-display text-[22px] leading-[28px]"><Download size={22} strokeWidth={2} aria-hidden />{tr("Télécharger en PDF", "Download as PDF")}</h2>
         {quota?.watermark === false ? (
-          <p className="mt-2 text-encre-douce">Inclus dans votre plan : PDF illimités, sans filigrane.</p>
+          <p className="mt-2 text-encre-douce">{tr("Inclus dans votre plan : PDF illimités, sans filigrane.", "Included in your plan: unlimited PDFs, no watermark.")}</p>
         ) : (
           <p className="mt-2 text-encre-douce">
-            Plan gratuit : PDF avec le filigrane MangaStudio, {quota?.limit ?? 3} chapitres par mois.{" "}
-            {restant !== null && <b className="text-encre">Encore {restant} ce mois-ci.</b>}{" "}
-            <Link to="/abonnements" className="font-bold text-indigo underline">Sans filigrane et illimité avec un plan payant</Link>.
+            {tr(`Plan gratuit : PDF avec le filigrane MangaStudio, ${quota?.limit ?? 3} chapitres par mois.`, `Free plan: PDF with the MangaStudio watermark, ${quota?.limit ?? 3} chapters per month.`)}{" "}
+            {restant !== null && <b className="text-encre">{tr(`Encore ${restant} ce mois-ci.`, `${restant} left this month.`)}</b>}{" "}
+            <Link to="/abonnements" className="font-bold text-indigo underline">{tr("Sans filigrane et illimité avec un plan payant", "No watermark and unlimited with a paid plan")}</Link>.
           </p>
         )}
         <Button variant="primary" className="mt-4" disabled={pdf.isPending} onClick={() => pdf.mutate()}>
-          <Download size={18} strokeWidth={2} aria-hidden />{pdf.isPending ? "Préparation du PDF…" : "Télécharger le PDF"}
+          <Download size={18} strokeWidth={2} aria-hidden />{pdf.isPending ? tr("Préparation du PDF…", "Preparing the PDF…") : tr("Télécharger le PDF", "Download the PDF")}
         </Button>
-        {pdf.isSuccess && <p role="status" className="mt-3 font-bold text-succes">PDF téléchargé.</p>}
+        {pdf.isSuccess && <p role="status" className="mt-3 font-bold text-succes">{tr("PDF téléchargé.", "PDF downloaded.")}</p>}
         <div className="mt-3"><ErrorNote error={pdf.error} /></div>
       </Card>
     </div>

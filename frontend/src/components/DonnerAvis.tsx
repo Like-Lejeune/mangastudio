@@ -5,17 +5,18 @@ import { Star } from "lucide-react";
 import { api } from "@/lib/api";
 import { Button, Card, ErrorNote, Field, Input, Pill, Textarea } from "@/components/ink";
 import { cn } from "@/lib/utils";
+import { tr } from "@/lib/i18n";
 
 export type MonAvis = {
   id: string; text: string; rating: number; display_name: string; role: string;
   status: "pending" | "approved" | "rejected"; created_at: string;
 } | null;
 
-const ETAT = {
-  pending: { texte: "En attente de validation", ton: "soleil" },
-  approved: { texte: "Publié sur la page d'accueil", ton: "succes" },
-  rejected: { texte: "Non publié", ton: "bulle" },
-} as const;
+const etat = (s: "pending" | "approved" | "rejected") => ({
+  pending: { texte: tr("En attente de validation", "Awaiting approval"), ton: "soleil" },
+  approved: { texte: tr("Publié sur la page d'accueil", "Published on the home page"), ton: "succes" },
+  rejected: { texte: tr("Non publié", "Not published"), ton: "bulle" },
+} as const)[s];
 
 /**
  * Formulaire « Donner mon avis ». Proposé à la fin d'un épisode et sur /mon-avis.
@@ -50,9 +51,9 @@ export function DonnerAvis({ episodeId, compact = false }: { episodeId?: string;
   if (compact && avis && !ouvert) {
     return (
       <Card className="mt-8 flex flex-wrap items-center gap-3">
-        <span className="font-bold">Merci pour votre avis !</span>
-        <Pill tone={ETAT[avis.status].ton}>{ETAT[avis.status].texte}</Pill>
-        <Link to="/mon-avis" className="ml-auto font-bold text-indigo underline">Modifier</Link>
+        <span className="font-bold">{tr("Merci pour votre avis !", "Thanks for your review!")}</span>
+        <Pill tone={etat(avis.status).ton}>{etat(avis.status).texte}</Pill>
+        <Link to="/mon-avis" className="ml-auto font-bold text-indigo underline">{tr("Modifier", "Edit")}</Link>
       </Card>
     );
   }
@@ -60,10 +61,10 @@ export function DonnerAvis({ episodeId, compact = false }: { episodeId?: string;
     return (
       <Card featured className="mt-8 flex flex-wrap items-center gap-4">
         <div className="flex-1">
-          <p className="font-display text-[22px] leading-[28px]">Votre épisode vous plaît ?</p>
-          <p className="text-encre-douce">Dites-le en une phrase : votre avis aidera d'autres auteurs à se lancer.</p>
+          <p className="font-display text-[22px] leading-[28px]">{tr("Votre épisode vous plaît ?", "Do you like your episode?")}</p>
+          <p className="text-encre-douce">{tr("Dites-le en une phrase : votre avis aidera d'autres auteurs à se lancer.", "Say it in one sentence: your review will help other authors get started.")}</p>
         </div>
-        <Button variant="primary" onClick={() => setOuvert(true)}>Donner mon avis</Button>
+        <Button variant="primary" onClick={() => setOuvert(true)}>{tr("Donner mon avis", "Leave a review")}</Button>
       </Card>
     );
   }
@@ -72,15 +73,15 @@ export function DonnerAvis({ episodeId, compact = false }: { episodeId?: string;
     <Card featured={compact} className={compact ? "mt-8" : undefined}>
       <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); envoyer.mutate(); }}>
         <div className="flex flex-wrap items-center gap-3">
-          <h2 className="font-display text-[24px] leading-[30px]">{avis ? "Mon avis" : "Donner mon avis"}</h2>
-          {avis && <Pill tone={ETAT[avis.status].ton}>{ETAT[avis.status].texte}</Pill>}
+          <h2 className="font-display text-[24px] leading-[30px]">{avis ? tr("Mon avis", "My review") : tr("Donner mon avis", "Leave a review")}</h2>
+          {avis && <Pill tone={etat(avis.status).ton}>{etat(avis.status).texte}</Pill>}
         </div>
 
         <fieldset>
-          <legend className="label-caps mb-2">Votre note</legend>
+          <legend className="label-caps mb-2">{tr("Votre note", "Your rating")}</legend>
           <div className="flex gap-1" role="radiogroup">
             {[1, 2, 3, 4, 5].map((n) => (
-              <button key={n} type="button" role="radio" aria-checked={note === n} aria-label={`${n} sur 5`} onClick={() => setNote(n)}
+              <button key={n} type="button" role="radio" aria-checked={note === n} aria-label={tr(`${n} sur 5`, `${n} out of 5`)} onClick={() => setNote(n)}
                 className="inline-flex size-11 items-center justify-center rounded-[4px] hover:bg-papier">
                 <Star size={28} strokeWidth={2} aria-hidden className={cn(n <= note ? "fill-soleil text-encre" : "text-trait")} />
               </button>
@@ -88,16 +89,16 @@ export function DonnerAvis({ episodeId, compact = false }: { episodeId?: string;
           </div>
         </fieldset>
 
-        <Field label="Votre avis" htmlFor="avis-texte" hint={<p className="tabular text-[12px] text-encre-douce">{texte.length} / 280</p>}>
+        <Field label={tr("Votre avis", "Your review")} htmlFor="avis-texte" hint={<p className="tabular text-[12px] text-encre-douce">{texte.length} / 280</p>}>
           <Textarea id="avis-texte" required minLength={10} maxLength={280} rows={3} value={texte} onChange={(e) => setTexte(e.target.value)}
-            placeholder="Ce que vous avez aimé, ce que vous avez créé, pour qui…" />
+            placeholder={tr("Ce que vous avez aimé, ce que vous avez créé, pour qui…", "What you liked, what you created, for whom…")} />
         </Field>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Nom affiché" htmlFor="avis-nom" hint={<p className="text-[12px] text-encre-douce">Ex. « Awa N. » : prénom et initiale suffisent</p>}>
+          <Field label={tr("Nom affiché", "Display name")} htmlFor="avis-nom" hint={<p className="text-[12px] text-encre-douce">{tr("Ex. « Awa N. » : prénom et initiale suffisent", "E.g. “Awa N.”: first name and initial are enough")}</p>}>
             <Input id="avis-nom" required minLength={2} maxLength={60} value={nom} onChange={(e) => setNom(e.target.value)} />
           </Field>
-          <Field label="Qui êtes-vous ? (facultatif)" htmlFor="avis-role" hint={<p className="text-[12px] text-encre-douce">Ex. « Étudiant, Yaoundé »</p>}>
+          <Field label={tr("Qui êtes-vous ? (facultatif)", "Who are you? (optional)")} htmlFor="avis-role" hint={<p className="text-[12px] text-encre-douce">{tr("Ex. « Étudiant, Yaoundé »", "E.g. “Student, Yaoundé”")}</p>}>
             <Input id="avis-role" maxLength={80} value={role} onChange={(e) => setRole(e.target.value)} />
           </Field>
         </div>
@@ -105,19 +106,19 @@ export function DonnerAvis({ episodeId, compact = false }: { episodeId?: string;
         <label className="flex items-start gap-3">
           <input type="checkbox" required checked={accord} onChange={(e) => setAccord(e.target.checked)} className="mt-1 size-5 shrink-0 accent-vermillon" />
           <span className="text-[15px] leading-6">
-            J'accepte que cet avis, avec le nom et la description ci-dessus, soit publié sur le site de MangaStudio. Je peux le retirer à tout moment depuis la page « Mon avis ».
+            {tr("J'accepte que cet avis, avec le nom et la description ci-dessus, soit publié sur le site de MangaStudio. Je peux le retirer à tout moment depuis la page « Mon avis ».", "I agree that this review, with the name and description above, may be published on the MangaStudio website. I can remove it at any time from the “My review” page.")}
           </span>
         </label>
 
         <ErrorNote error={envoyer.error ?? retirer.error} />
-        {envoyer.isSuccess && <p role="status" className="font-bold text-succes">Merci ! Votre avis sera publié après une rapide relecture.</p>}
+        {envoyer.isSuccess && <p role="status" className="font-bold text-succes">{tr("Merci ! Votre avis sera publié après une rapide relecture.", "Thanks! Your review will be published after a quick check.")}</p>}
 
         <div className="flex flex-wrap gap-3">
-          <Button type="submit" variant="primary" disabled={envoyer.isPending || !accord}>{avis ? "Mettre à jour" : "Envoyer mon avis"}</Button>
-          {compact && <Button type="button" onClick={() => setOuvert(false)}>Plus tard</Button>}
-          {avis && !compact && <Button type="button" disabled={retirer.isPending} onClick={() => retirer.mutate()}>Retirer mon avis</Button>}
+          <Button type="submit" variant="primary" disabled={envoyer.isPending || !accord}>{avis ? tr("Mettre à jour", "Update") : tr("Envoyer mon avis", "Send my review")}</Button>
+          {compact && <Button type="button" onClick={() => setOuvert(false)}>{tr("Plus tard", "Later")}</Button>}
+          {avis && !compact && <Button type="button" disabled={retirer.isPending} onClick={() => retirer.mutate()}>{tr("Retirer mon avis", "Remove my review")}</Button>}
         </div>
-        <p className="text-[13px] text-encre-douce">Votre adresse e-mail n'est jamais affichée. Toute modification repasse en relecture.</p>
+        <p className="text-[13px] text-encre-douce">{tr("Votre adresse e-mail n'est jamais affichée. Toute modification repasse en relecture.", "Your email address is never shown. Any change goes back for review.")}</p>
       </form>
     </Card>
   );

@@ -2,11 +2,12 @@ import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Check, Star } from "lucide-react";
-import { api, type Plans } from "@/lib/api";
+import { api, planName, type Plans } from "@/lib/api";
+import { intlLocale, tr } from "@/lib/i18n";
 import { AVIS, PARTENAIRES, type Avis, type Partenaire } from "@/content/accueil";
 import { btnClass, Onomatopee } from "@/components/ink";
 import { cn } from "@/lib/utils";
-import { STYLES_MANGA } from "@/content/styles";
+import { stylesManga } from "@/content/styles";
 import { VignetteStyle } from "@/components/StyleManga";
 import { Esquisses, IconeEtape, PlancheAnimee } from "./Planche";
 import { CarteHistoire } from "@/components/galerie/CarteHistoire";
@@ -43,7 +44,7 @@ function Titre({ sur, children, sous }: { sur: string; children: ReactNode; sous
   );
 }
 
-const fcfa = (n: number) => `${new Intl.NumberFormat("fr-FR").format(n)} FCFA`;
+const fcfa = (n: number) => `${new Intl.NumberFormat(intlLocale()).format(n)} FCFA`;
 
 export function Accueil() {
   const { data: plans } = useQuery({ queryKey: ["plans"], queryFn: () => api<Plans>("/plans"), staleTime: 3_600_000 });
@@ -64,11 +65,11 @@ export function Accueil() {
         <Esquisses className="pointer-events-none absolute inset-0 h-full w-full" />
         <div className="relative mx-auto grid max-w-[1200px] items-center gap-12 px-4 pb-16 pt-10 sm:px-6 lg:grid-cols-[1.15fr_1fr] lg:pb-24 lg:pt-16">
           <div>
-            <p className="label-caps mb-4">Studio de manga en ligne</p>
+            <p className="label-caps mb-4">{tr("Studio de manga en ligne", "Online manga studio")}</p>
             <h1 className="font-display text-[40px] leading-[46px] sm:text-[60px] sm:leading-[66px]">
-              Votre idée. Vos personnages.{" "}
+              {tr("Votre idée. Vos personnages.", "Your idea. Your characters.")}{" "}
               <span className="relative inline-block whitespace-nowrap text-vermillon">
-                Votre manga.
+                {tr("Votre manga.", "Your manga.")}
                 <svg viewBox="0 0 300 20" preserveAspectRatio="none" className="absolute -bottom-2 left-0 h-3 w-full" aria-hidden>
                   <path pathLength={1} className="trait" style={{ "--d": "1.2s", "--t": "0.7s" } as CSSProperties}
                     d="M4,14 C80,4 180,4 296,10" fill="none" stroke="var(--encre)" strokeWidth="5" strokeLinecap="round" />
@@ -76,13 +77,14 @@ export function Accueil() {
               </span>
             </h1>
             <p className="mt-8 max-w-xl text-[18px] leading-7 text-encre-douce">
-              Décrivez une histoire en quelques lignes, présentez vos personnages : MangaStudio écrit le scénario et dessine chaque page, case après case, avec des bulles en français.
+              {tr("Décrivez une histoire en quelques lignes, présentez vos personnages : MangaStudio écrit le scénario et dessine chaque page, case après case, avec des bulles en français ou en anglais.",
+                "Describe a story in a few lines, introduce your characters: MangaStudio writes the script and draws every page, panel by panel, with balloons in English or French.")}
             </p>
             <div className="mt-8 flex flex-wrap gap-4">
-              <Link to="/inscription" className={btnClass("primary")}>Créer mon premier épisode</Link>
-              <a href="#tarifs" className={btnClass()}>Voir les tarifs</a>
+              <Link to="/inscription" className={btnClass("primary")}>{tr("Créer mon premier épisode", "Create my first episode")}</Link>
+              <a href="#tarifs" className={btnClass()}>{tr("Voir les tarifs", "See pricing")}</a>
             </div>
-            <p className="mt-6 text-[14px] text-encre-douce">Gratuit pour commencer, sans carte : {plans ? `${plans.plans[0]?.credits} crédits offerts` : "des crédits offerts"} à l'inscription.</p>
+            <p className="mt-6 text-[14px] text-encre-douce">{tr("Gratuit pour commencer, sans carte : ", "Free to start, no card needed: ")}{plans ? tr(`${plans.plans[0]?.credits} crédits offerts`, `${plans.plans[0]?.credits} free credits`) : tr("des crédits offerts", "free credits")}{tr(" à l'inscription.", " when you sign up.")}</p>
           </div>
           <div className="relative mx-auto w-full max-w-[400px]">
             <div className="rotate-[1.5deg] border-2 border-encre bg-blanc shadow-ink-lg">
@@ -100,12 +102,12 @@ export function Accueil() {
 
       {/* ───── Comment ça marche ───── */}
       <section className="mx-auto max-w-[1200px] px-4 py-20 sm:px-6">
-        <Titre sur="Comment ça marche" sous="Trois étapes, quelques minutes, et votre épisode se lit page après page.">De l'idée à la planche</Titre>
+        <Titre sur={tr("Comment ça marche", "How it works")} sous={tr("Trois étapes, quelques minutes, et votre épisode se lit page après page.", "Three steps, a few minutes, and your episode reads page after page.")}>{tr("De l'idée à la planche", "From idea to page")}</Titre>
         <ol className="grid gap-6 md:grid-cols-3">
           {([
-            [1, "Racontez l'idée", "Une phrase ou une page : le pitch de votre série, son style (shōnen, shōjo, seinen, kodomo ou afro-manga) et sa langue."],
-            [2, "Présentez vos personnages", `Nom, rôle, description et, si vous le voulez, une photo. Jusqu'à ${studio?.max_characters ?? 10} personnages par épisode, chacun avec sa fiche modèle.`],
-            [3, "Regardez l'épisode se dessiner", `Le scénario est écrit puis vérifié, et chaque page est dessinée sous vos yeux. Jusqu'à ${studio?.max_pages ?? 24} pages par épisode.`],
+            [1, tr("Racontez l'idée", "Tell your idea"), tr("Une phrase ou une page : le pitch de votre série, son style (shōnen, shōjo, seinen, kodomo ou afro-manga) et sa langue.", "A sentence or a page: your series' pitch, its style (shōnen, shōjo, seinen, kodomo or afro-manga) and its language.")],
+            [2, tr("Présentez vos personnages", "Introduce your characters"), tr(`Nom, rôle, description et, si vous le voulez, une photo. Jusqu'à ${studio?.max_characters ?? 10} personnages par épisode, chacun avec sa fiche modèle.`, `Name, role, description and, if you like, a photo. Up to ${studio?.max_characters ?? 10} characters per episode, each with its model sheet.`)],
+            [3, tr("Regardez l'épisode se dessiner", "Watch the episode being drawn"), tr(`Le scénario est écrit puis vérifié, et chaque page est dessinée sous vos yeux. Jusqu'à ${studio?.max_pages ?? 24} pages par épisode.`, `The script is written then checked, and every page is drawn before your eyes. Up to ${studio?.max_pages ?? 24} pages per episode.`)],
           ] as const).map(([n, t, d], i) => (
             <Revele as="li" key={n} delai={i * 0.15} className="relative rounded-[8px] border-2 border-encre bg-bulle p-6 shadow-ink">
               <span className="tabular absolute right-5 top-4 text-[40px] font-bold leading-none text-trait">0{n}</span>
@@ -119,14 +121,14 @@ export function Accueil() {
 
       {/* ───── Les styles ───── */}
       <section className="mx-auto max-w-[1200px] px-4 pb-20 sm:px-6">
-        <Titre sur="Cinq styles" sous="Du combat épique au conte pour enfants, et un style né ici : l'afro-manga.">Choisissez votre trait</Titre>
+        <Titre sur={tr("Cinq styles", "Five styles")} sous={tr("Du combat épique au conte pour enfants, et un style né ici : l'afro-manga.", "From epic fights to children's tales, and a style born here: afro-manga.")}>{tr("Choisissez votre trait", "Choose your style")}</Titre>
         <ul className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-5">
-          {STYLES_MANGA.map((st, i) => (
+          {stylesManga().map((st, i) => (
             <Revele as="li" key={st.id} delai={i * 0.08}>
               <Link to="/styles" hash={st.id} className="group block">
                 <div className="relative">
                   <VignetteStyle style={st} legende className="aspect-[2/3] w-full shadow-ink transition-transform group-hover:-translate-y-1" />
-                  {st.nouveau && <span className="absolute -right-2 -top-3 rotate-6 rounded-[4px] border-2 border-encre bg-soleil px-2 py-0.5 text-[12px] font-bold">Nouveau</span>}
+                  {st.nouveau && <span className="absolute -right-2 -top-3 rotate-6 rounded-[4px] border-2 border-encre bg-soleil px-2 py-0.5 text-[12px] font-bold">{tr("Nouveau", "New")}</span>}
                 </div>
                 <p className="mt-3 font-display text-[20px] leading-[26px]">{st.nom}</p>
                 <p className="text-[14px] leading-5 text-encre-douce">{st.accroche}</p>
@@ -134,17 +136,17 @@ export function Accueil() {
             </Revele>
           ))}
         </ul>
-        <p className="mt-8 text-center"><Link to="/styles" className="font-bold text-indigo underline">Comparer les styles en détail</Link></p>
+        <p className="mt-8 text-center"><Link to="/styles" className="font-bold text-indigo underline">{tr("Comparer les styles en détail", "Compare the styles in detail")}</Link></p>
       </section>
 
       {/* ───── Ce qui est inclus ───── */}
       <section className="border-y-2 border-encre bg-encre text-papier">
         <div className="mx-auto grid max-w-[1200px] gap-8 px-4 py-14 sm:grid-cols-2 sm:px-6 lg:grid-cols-4">
           {[
-            [`${studio?.max_pages ?? 24}`, "pages par épisode", "avec le plan Studio"],
-            [`${studio?.max_characters ?? 10}`, "personnages par épisode", "visages gardés d'une page à l'autre"],
-            ["FR · EN", "bulles lettrées", "dans la langue de votre série"],
-            ["Mobile money", "pour payer", "MTN et Orange, en FCFA"],
+            [`${studio?.max_pages ?? 24}`, tr("pages par épisode", "pages per episode"), tr("avec le plan Studio", "with the Studio plan")],
+            [`${studio?.max_characters ?? 10}`, tr("personnages par épisode", "characters per episode"), tr("visages gardés d'une page à l'autre", "faces kept from page to page")],
+            ["FR · EN", tr("bulles lettrées", "lettered balloons"), tr("dans la langue de votre série", "in your series' language")],
+            ["Mobile money", tr("pour payer", "to pay"), tr("MTN et Orange, en FCFA", "MTN and Orange, in FCFA")],
           ].map(([chiffre, quoi, detail], i) => (
             <Revele key={quoi} delai={i * 0.1}>
               <p className="font-display text-[40px] leading-[46px] text-soleil">{chiffre}</p>
@@ -160,19 +162,19 @@ export function Accueil() {
 
       {/* ───── Galerie « À lire » ───── */}
       {semaine.length > 0 ? (
-        <SectionGalerie sur="À lire" titre="Les plus aimées de la semaine" items={semaine} tri="semaine" />
+        <SectionGalerie sur={tr("À lire", "Read")} titre={tr("Les plus aimées de la semaine", "Most liked this week")} items={semaine} tri="semaine" />
       ) : recentes.length > 0 && (
         // Pas encore de « j'aime » cette semaine : on montre les dernières histoires publiées.
-        <SectionGalerie sur="À lire" titre="Les dernières histoires publiées" items={recentes} tri="recentes" />
+        <SectionGalerie sur={tr("À lire", "Read")} titre={tr("Les dernières histoires publiées", "Latest published stories")} items={recentes} tri="recentes" />
       )}
       {coups.length > 0 && (
-        <SectionGalerie sur="Choisies par l'équipe" titre="Coups de cœur" items={coups} tri="coups" />
+        <SectionGalerie sur={tr("Choisies par l'équipe", "Chosen by the team")} titre={tr("Coups de cœur", "Staff picks")} items={coups} tri="coups" />
       )}
 
       {/* ───── Avis ───── */}
       {avis.length > 0 && (
         <section className="mx-auto max-w-[1200px] px-4 pt-20 sm:px-6">
-          <Titre sur="Ils nous font confiance">Ce qu'en disent nos auteurs</Titre>
+          <Titre sur={tr("Ils nous font confiance", "They trust us")}>{tr("Ce qu'en disent nos auteurs", "What our authors say")}</Titre>
           {/* Centré : un ou deux avis au lancement ne restent pas collés à gauche. */}
           <ul className="flex flex-wrap justify-center gap-x-6 gap-y-10 [&>li]:w-full md:[&>li]:w-[calc(50%-12px)] lg:[&>li]:w-[calc(33.333%-16px)]">
             {avis.map((a, i) => <CarteAvis key={a.nom + i} avis={a} delai={(i % 3) * 0.15} />)}
@@ -182,7 +184,7 @@ export function Accueil() {
 
       {/* ───── Tarifs ───── */}
       <section id="tarifs" className="mx-auto max-w-[1200px] scroll-mt-24 px-4 py-20 sm:px-6">
-        <Titre sur="Tarifs" sous="1 crédit = 1 image livrée. Les crédits réservés pour un épisode interrompu vous sont rendus.">Commencez gratuitement</Titre>
+        <Titre sur={tr("Tarifs", "Pricing")} sous={tr("1 crédit = 1 image livrée. Les crédits réservés pour un épisode interrompu vous sont rendus.", "1 credit = 1 delivered image. Credits reserved for an interrupted episode are refunded.")}>{tr("Commencez gratuitement", "Start for free")}</Titre>
         {plans && (
           <ul className="grid gap-6 md:grid-cols-3">
             {plans.plans.map((p, i) => {
@@ -191,18 +193,19 @@ export function Accueil() {
                 <Revele as="li" key={p.id} delai={i * 0.12}
                   className={cn("flex flex-col rounded-[8px] border-2 border-encre bg-bulle p-6", vedette ? "shadow-ink-lg md:-translate-y-2" : "shadow-ink")}>
                   <div className="flex items-center justify-between gap-2">
-                    <h3 className="font-display text-[24px] leading-[30px]">{p.name}</h3>
-                    {vedette && <span className="rounded-full border-2 border-encre bg-soleil px-3 py-0.5 text-[12px] font-bold">Recommandé</span>}
+                    <h3 className="font-display text-[24px] leading-[30px]">{planName(p.id, p.name)}</h3>
+                    {vedette && <span className="rounded-full border-2 border-encre bg-soleil px-3 py-0.5 text-[12px] font-bold">{tr("Recommandé", "Recommended")}</span>}
                   </div>
-                  <p className="mt-4"><span className="tabular text-[32px] font-bold">{p.price_xaf ? fcfa(p.price_xaf) : "Gratuit"}</span>{p.price_xaf > 0 && <span className="text-encre-douce"> / mois</span>}</p>
+                  <p className="mt-4"><span className="tabular text-[32px] font-bold">{p.price_xaf ? fcfa(p.price_xaf) : tr("Gratuit", "Free")}</span>{p.price_xaf > 0 && <span className="text-encre-douce">{tr(" / mois", " / month")}</span>}</p>
                   <ul className="mt-6 flex flex-1 flex-col gap-2 text-[15px]">
-                    {[`${p.credits} crédits${p.price_xaf ? " par mois" : " offerts"}`, `Jusqu'à ${p.max_pages} pages par épisode`, `Jusqu'à ${p.max_characters} personnages`,
-                      p.color ? "Noir et blanc ou couleur" : "Noir et blanc", ...(p.redraw ? ["Redessiner une page"] : [])].map((l) => (
+                    {[p.price_xaf ? tr(`${p.credits} crédits par mois`, `${p.credits} credits per month`) : tr(`${p.credits} crédits offerts`, `${p.credits} free credits`),
+                      tr(`Jusqu'à ${p.max_pages} pages par épisode`, `Up to ${p.max_pages} pages per episode`), tr(`Jusqu'à ${p.max_characters} personnages`, `Up to ${p.max_characters} characters`),
+                      p.color ? tr("Noir et blanc ou couleur", "Black & white or colour") : tr("Noir et blanc", "Black & white"), ...(p.redraw ? [tr("Redessiner une page", "Redraw a page")] : [])].map((l) => (
                       <li key={l} className="flex gap-2"><Check size={20} strokeWidth={2.5} className="mt-0.5 shrink-0 text-succes" aria-hidden />{l}</li>
                     ))}
                   </ul>
                   <Link to="/inscription" className={cn(btnClass(vedette ? "primary" : "secondary"), "mt-6 justify-center")}>
-                    {p.price_xaf ? `Choisir ${p.name}` : "Commencer gratuitement"}
+                    {p.price_xaf ? tr(`Choisir ${planName(p.id, p.name)}`, `Choose ${planName(p.id, p.name)}`) : tr("Commencer gratuitement", "Start for free")}
                   </Link>
                 </Revele>
               );
@@ -212,7 +215,8 @@ export function Accueil() {
         {plans && (() => {
           const packs = plans.packs ?? [{ id: "pack", ...plans.pack }];
           const petit = packs[0]!;
-          return <p className="mt-8 text-center text-encre-douce">Besoin de plus ? Des packs de <b>{packs.map((p) => p.credits).join(", ").replace(/, (\d+)$/, " ou $1")} crédits</b>, dès <b>{fcfa(petit.price_xaf)}</b>, sans date d'expiration.</p>;
+          const liste = packs.map((p) => p.credits).join(", ").replace(/, (\d+)$/, tr(" ou $1", " or $1"));
+          return <p className="mt-8 text-center text-encre-douce">{tr("Besoin de plus ? Des packs de ", "Need more? Packs of ")}<b>{liste} {tr("crédits", "credits")}</b>{tr(", dès ", ", from ")}<b>{fcfa(petit.price_xaf)}</b>{tr(", sans date d'expiration.", ", with no expiry date.")}</p>;
         })()}
       </section>
 
@@ -220,10 +224,10 @@ export function Accueil() {
       <section className="relative overflow-hidden border-t-2 border-encre bg-vermillon text-sur-vermillon">
         <div className="vitesse pointer-events-none absolute inset-0" aria-hidden />
         <Revele className="relative mx-auto max-w-[900px] px-4 py-20 text-center sm:px-6">
-          <h2 className="font-display text-[36px] leading-[42px] sm:text-[52px] sm:leading-[58px]">Le premier chapitre commence par une idée.</h2>
-          <p className="mx-auto mt-4 max-w-xl text-[18px] leading-7">Écrivez-la, on s'occupe du dessin.</p>
+          <h2 className="font-display text-[36px] leading-[42px] sm:text-[52px] sm:leading-[58px]">{tr("Le premier chapitre commence par une idée.", "The first chapter starts with an idea.")}</h2>
+          <p className="mx-auto mt-4 max-w-xl text-[18px] leading-7">{tr("Écrivez-la, on s'occupe du dessin.", "Write it down, we'll handle the drawing.")}</p>
           <Link to="/inscription" className="mt-8 inline-flex min-h-12 items-center rounded-[4px] border-2 border-encre bg-bulle px-6 font-bold text-encre shadow-ink transition-transform hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-ink-sm">
-            Créer mon premier épisode
+            {tr("Créer mon premier épisode", "Create my first episode")}
           </Link>
         </Revele>
       </section>
@@ -235,11 +239,11 @@ export function Accueil() {
 function SectionGalerie({ sur, titre, items, tri }: { sur: string; titre: string; items: PageGalerie["items"]; tri: TriGalerie }) {
   return (
     <section className="mx-auto max-w-[1200px] px-4 pt-20 sm:px-6">
-      <Titre sur={sur} sous="Des chapitres créés par nos auteurs, à lire gratuitement.">{titre}</Titre>
+      <Titre sur={sur} sous={tr("Des chapitres créés par nos auteurs, à lire gratuitement.", "Chapters created by our authors, free to read.")}>{titre}</Titre>
       <ul className="flex flex-wrap justify-center gap-6 [&>li]:w-full sm:[&>li]:w-[calc(50%-12px)] lg:[&>li]:w-[calc(25%-18px)]">
         {items.map((c, i) => <Revele as="li" key={c.id} delai={i * 0.1}><CarteHistoire c={c} semaine={tri === "semaine"} /></Revele>)}
       </ul>
-      <p className="mt-8 text-center"><Link to="/galerie" search={{ tri }} className="font-bold text-indigo underline">Voir toute la galerie</Link></p>
+      <p className="mt-8 text-center"><Link to="/galerie" search={{ tri }} className="font-bold text-indigo underline">{tr("Voir toute la galerie", "See the whole gallery")}</Link></p>
     </section>
   );
 }
@@ -261,8 +265,8 @@ function BandeauPartenaires({ items }: { items: Partenaire[] }) {
     </ul>
   );
   return (
-    <section aria-label="Ils nous font confiance" className="border-y-2 border-encre bg-bulle py-8">
-      <p className="label-caps mb-6 text-center">Ils nous font confiance</p>
+    <section aria-label={tr("Ils nous font confiance", "They trust us")} className="border-y-2 border-encre bg-bulle py-8">
+      <p className="label-caps mb-6 text-center">{tr("Ils nous font confiance", "They trust us")}</p>
       <div className="defilement overflow-hidden">
         <div className="defilement-piste flex w-max" style={{ "--duree": `${Math.max(20, items.length * 5)}s` } as CSSProperties}>
           {piste(false)}{piste(true)}
@@ -279,11 +283,11 @@ function CarteAvis({ avis, delai }: { avis: Avis; delai: number }) {
       <figure className="m-0 flex h-full flex-col">
         <blockquote className="relative flex-1 rounded-[20px] border-2 border-encre bg-bulle p-6 shadow-ink">
           {avis.note && (
-            <p className="mb-3 flex gap-0.5" aria-label={`${avis.note} sur 5`}>
+            <p className="mb-3 flex gap-0.5" aria-label={tr(`${avis.note} sur 5`, `${avis.note} out of 5`)}>
               {Array.from({ length: 5 }, (_, i) => <Star key={i} size={18} strokeWidth={2} aria-hidden className={i < avis.note! ? "fill-soleil text-encre" : "text-trait"} />)}
             </p>
           )}
-          <p className="text-[17px] leading-7">« {avis.texte} »</p>
+          <p className="text-[17px] leading-7">{tr(`« ${avis.texte} »`, `“${avis.texte}”`)}</p>
           {/* queue de bulle */}
           <svg viewBox="0 0 40 24" className="absolute -bottom-[22px] left-10 h-6 w-10" aria-hidden>
             <path d="M0,0 L14,22 L30,0" fill="var(--bulle)" stroke="var(--encre)" strokeWidth="2" strokeLinejoin="round" />
