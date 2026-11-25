@@ -9,6 +9,7 @@ from app.config import get_settings
 from app.db import get_session
 from app.models import (
     Character,
+    ContestEntry,
     Episode,
     EpisodeCharacter,
     Like,
@@ -150,6 +151,9 @@ async def delete_episode(session: AsyncSession, e: Episode) -> int:
     pages = (await session.execute(select(Page).where(Page.episode_id == e.id))).scalars().all()
     files = [p.image_path for p in pages if p.image_path]
     number = e.number
+    pubs = select(Publication.id).where(Publication.episode_id == e.id)
+    await session.execute(delete(Like).where(Like.publication_id.in_(pubs)))
+    await session.execute(delete(ContestEntry).where(ContestEntry.publication_id.in_(pubs)))
     await session.execute(delete(Publication).where(Publication.episode_id == e.id))
     await session.execute(delete(EpisodeCharacter).where(EpisodeCharacter.episode_id == e.id))
     await session.execute(delete(Page).where(Page.episode_id == e.id))
@@ -170,6 +174,7 @@ async def delete_series(session: AsyncSession, series: Series) -> dict:
     if ids:
         pubs = select(Publication.id).where(Publication.episode_id.in_(ids))
         await session.execute(delete(Like).where(Like.publication_id.in_(pubs)))
+        await session.execute(delete(ContestEntry).where(ContestEntry.publication_id.in_(pubs)))
         await session.execute(delete(Publication).where(Publication.episode_id.in_(ids)))
         await session.execute(delete(EpisodeCharacter).where(EpisodeCharacter.episode_id.in_(ids)))
         await session.execute(delete(Page).where(Page.episode_id.in_(ids)))

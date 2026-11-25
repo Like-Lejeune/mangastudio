@@ -18,6 +18,8 @@ export function Footer() {
           <ul>
             <li><Link to="/" hash="tarifs" className={lien}>Tarifs</Link></li>
             <li><Link to="/styles" className={lien}>Les styles</Link></li>
+            <li><Link to="/galerie" className={lien}>À lire</Link></li>
+            <li><Link to="/concours" className={lien}>Concours</Link></li>
             <li><Link to="/abonnements" className={lien}>Abonnements</Link></li>
             <li><Link to="/inscription" className={lien}>Créer un compte</Link></li>
           </ul>
@@ -28,6 +30,7 @@ export function Footer() {
             <li><Link to="/faq" className={lien}>Questions fréquentes</Link></li>
             <li><Link to="/contact" className={lien}>Nous contacter</Link></li>
             <li><Link to="/mon-avis" className={lien}>Donner mon avis</Link></li>
+            <li><Link to="/regles-publication" className={lien}>Règles de publication</Link></li>
             <li><Link to="/gagner" className={lien}>Gagner des crédits</Link></li>
             <li><Link to="/soutenir" className={`${lien} font-bold text-vermillon`}>Nous soutenir</Link></li>
           </ul>

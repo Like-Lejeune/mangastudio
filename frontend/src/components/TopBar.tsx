@@ -21,6 +21,8 @@ export function TopBar() {
           <>
             <nav className="flex flex-wrap items-center gap-x-1" aria-label="Navigation principale">
               <Link to="/" className={navCls} activeProps={{ className: "text-vermillon" }} activeOptions={{ exact: true }}>Mes séries</Link>
+              <Link to="/galerie" className={navCls} activeProps={{ className: "text-vermillon" }}>À lire</Link>
+              <Link to="/concours" className={navCls} activeProps={{ className: "text-vermillon" }}>Concours</Link>
               <Link to="/abonnements" className={navCls} activeProps={{ className: "text-vermillon" }}>Abonnements</Link>
               <Link to="/faq" className={navCls} activeProps={{ className: "text-vermillon" }}>FAQ</Link>
               {me?.is_admin && <Link to="/admin" className={navCls} activeProps={{ className: "text-vermillon" }}>Administration</Link>}
@@ -46,6 +48,8 @@ export function TopBar() {
           </>
         ) : token === null ? (
           <div className="ml-auto flex flex-wrap gap-2">
+            <Link to="/galerie" className={navCls} activeProps={{ className: "text-vermillon" }}>À lire</Link>
+            <Link to="/concours" className={navCls} activeProps={{ className: "text-vermillon" }}>Concours</Link>
             <Link to="/faq" className={navCls} activeProps={{ className: "text-vermillon" }}>FAQ</Link>
             <Link to="/soutenir" className={navCls} activeProps={{ className: "text-vermillon" }}>Nous soutenir</Link>
             <Link to="/connexion" className={navCls}>Connexion</Link>

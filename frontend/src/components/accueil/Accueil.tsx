@@ -10,6 +10,7 @@ import { STYLES_MANGA } from "@/content/styles";
 import { VignetteStyle } from "@/components/StyleManga";
 import { Esquisses, IconeEtape, PlancheAnimee } from "./Planche";
 import { CarteHistoire } from "@/components/galerie/CarteHistoire";
+import { BandeauConcours } from "@/components/BandeauConcours";
 import type { PageGalerie, TriGalerie } from "@/lib/galerie";
 
 /** Ajoute .anime quand l'élément arrive à l'écran (une seule fois). */
@@ -153,6 +154,9 @@ export function Accueil() {
           ))}
         </div>
       </section>
+
+      {/* ───── Concours ───── */}
+      <div className="mx-auto max-w-[1200px] px-4 pt-20 empty:hidden sm:px-6"><BandeauConcours /></div>
 
       {/* ───── Galerie « À lire » ───── */}
       {semaine.length > 0 ? (

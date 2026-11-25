@@ -6,6 +6,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -321,3 +322,40 @@ class Like(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     publication_id: Mapped[str] = mapped_column(ForeignKey("publications.id", ondelete="CASCADE"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+
+
+class Contest(Base):
+    """Un concours créé par l'administration. Les phases se déduisent des dates (voir app.contests.phase)."""
+    __tablename__ = "contests"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    slug: Mapped[str] = mapped_column(String(80), unique=True)
+    title: Mapped[str] = mapped_column(String(120))
+    theme: Mapped[str] = mapped_column(String(300), default="")
+    description: Mapped[str] = mapped_column(Text, default="")
+    rules: Mapped[str] = mapped_column(Text, default="")               # règlement, affiché tel quel
+    style: Mapped[str] = mapped_column(String(20), default="")         # style imposé ; vide = tous
+    new_only: Mapped[bool] = mapped_column(Boolean, default=True)      # chapitres créés pendant le concours seulement
+    max_entries: Mapped[int] = mapped_column(Integer, default=1)       # par participant
+    prizes: Mapped[list] = mapped_column(JSON, default=list)           # [{"rank":1,"credits":100,"studio_days":30}]
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    visible: Mapped[bool] = mapped_column(Boolean, default=False)      # brouillon tant que False
+    results_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class ContestEntry(Base):
+    """Une histoire inscrite à un concours. Note du jury sur 20 ; « j'aime » comptés pendant le concours."""
+    __tablename__ = "contest_entries"
+    __table_args__ = (UniqueConstraint("contest_id", "publication_id"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    contest_id: Mapped[str] = mapped_column(ForeignKey("contests.id", ondelete="CASCADE"), index=True)
+    publication_id: Mapped[str] = mapped_column(ForeignKey("publications.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    jury_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    likes: Mapped[int] = mapped_column(Integer, default=0)             # figé à la proclamation
+    score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    prize: Mapped[str] = mapped_column(String(200), default="")
+    disqualified: Mapped[str] = mapped_column(String(300), default="")  # motif ; vide = en lice
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

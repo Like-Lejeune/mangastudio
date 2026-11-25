@@ -142,6 +142,10 @@ async def gallery_item(pub_id: str, user: User | None = Depends(optional_user), 
     data["premise"] = e.series.premise
     data["page_urls"] = [storage.url(pg.image_path) for pg in e.pages if pg.image_path]
     data["is_author"] = bool(user and user.id == p.user_id)
+    from app.routers.contests import (
+        awards_for,  # import tardif : contests importe ce module
+    )
+    data["awards"] = await awards_for(session, p.id)
     return data
 
 
