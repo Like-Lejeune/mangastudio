@@ -1,0 +1,2439 @@
+diff --git a/.gitignore b/.gitignore
+index 6e6f397..0b2a409 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -24,3 +24,6 @@ node_modules/
+ dist/
+ .tanstack/
+ sauvegardes/
++# Dépôt des fichiers livrés et anciennes versions gardées par ranger.py
++a_ranger/
++.anciennes_versions/
+diff --git a/backend/app/pipeline/runner.py b/backend/app/pipeline/runner.py
+index 53abf70..302dd60 100644
+--- a/backend/app/pipeline/runner.py
++++ b/backend/app/pipeline/runner.py
+@@ -35,6 +35,20 @@ class Blocked(Exception):
+     """La modération a arrêté l'épisode."""
+ 
+ 
++def folder(episode: Episode) -> str:
++    """Dossier des pages d'un épisode. L'identifiant évite qu'un épisode supprimé puis refait sous le même numéro
++    partage ses adresses d'images (et le cache des navigateurs) avec l'ancien."""
++    return f"ep{episode.number}-{episode.id[:8]}"
++
++
++def refused_message(names: list[str]) -> str:
++    qui = " et ".join(f"« {n} »" for n in names)
++    return (f"Le dessinateur IA refuse de dessiner {qui}. C'est presque toujours parce que le nom ou l'apparence "
++            "ressemble à un personnage existant (protégé par le droit d'auteur), ou à un contenu interdit. "
++            "Modifiez ce personnage depuis la page de la série (autre nom, autre apparence), puis lancez un nouvel épisode. "
++            "Les crédits non utilisés vous ont été rendus.")
++
++
+ def _mime(path: str) -> str:
+     return MIME.get(path.rsplit(".", 1)[-1], "image/png")
+ 
+@@ -84,6 +98,10 @@ async def run_episode(episode_id: str, studio: Studio | None = None) -> None:
+                 status, error = "failed", f"Pages à refaire : {', '.join(map(str, failed))}."
+         except Blocked as e:
+             status, error = "blocked", str(e)
++        except ContentBlocked:
++            log.warning("épisode %s refusé par le filtre du fournisseur", episode_id)
++            status, error = "blocked", ("Le dessinateur IA a refusé une image de cet épisode (personnage ou scène trop proche d'une "
++                                        "œuvre existante, ou contenu interdit). Modifiez la série ou les personnages, puis lancez un nouvel épisode.")
+         except Exception as e:  # noqa: BLE001  (toute panne doit laisser l'épisode dans un état lisible)
+             log.exception("épisode %s", episode_id)
+             status, error = "failed", f"La génération s'est interrompue ({type(e).__name__}). Vous pouvez la reprendre."
+@@ -168,14 +186,30 @@ async def _run(session: AsyncSession, episode: Episode, studio: Studio, user_id:
+ 
+     async def sheet(c: Character):
+         refs = [(await storage.load(c.photo_path), _mime(c.photo_path))] if c.photo_path else []
+-        info = {"name": c.name, "look": c.look}
+         async with sem:
+-            return c, await _draw(studio, prompts.sheet_prompt(info, series.style, series.palette, bool(refs)), refs, "1536x1024")
+-
++            try:
++                prompt = prompts.sheet_prompt({"name": c.name, "look": c.look}, series.style, series.palette, bool(refs))
++                return c, await _draw(studio, prompt, refs, "1536x1024")
++            except ContentBlocked:
++                # Un nom connu suffit souvent à déclencher le filtre : dernier essai sans le nom.
++                prompt = prompts.sheet_prompt({"name": "an original character", "look": c.look}, series.style, series.palette, bool(refs))
++                try:
++                    return c, await _draw(studio, prompt, refs, "1536x1024")
++                except ContentBlocked:
++                    return c, None
++
++    refused = []
+     for c, result in await asyncio.gather(*(sheet(c) for c in cast if not c.sheet_path)):
++        if result is None:
++            refused.append(c.name)
++            moderation.log(session, user_id=user_id, episode_id=episode.id, checkpoint="image", action="block",
++                           rule="fiche refusée par le dessinateur", excerpt=f"{c.name} : {c.look}"[:500])
++            continue
+         c.sheet_path = await storage.save(f"series/{series.id}/sheets/{c.slug}", result.image, result.mime)
+         record("sheet", studio.artist, studio.artist_model, result.usage)
+     await session.commit()
++    if refused:
++        raise Blocked(refused_message(refused))
+ 
+     sheets = {c.slug: (await storage.load(c.sheet_path), _mime(c.sheet_path)) for c in cast}
+     names = {c.slug: c.name for c in cast}
+@@ -216,7 +250,7 @@ async def _run(session: AsyncSession, episode: Episode, studio: Studio, user_id:
+                 image, note = None, f"Dessin impossible ({type(e).__name__})."
+         async with lock:
+             if image and not forbidden:
+-                row.image_path = await storage.save(f"series/{series.id}/ep{episode.number}/page-{row.number}", image.image, image.mime)
++                row.image_path = await storage.save(f"series/{series.id}/{folder(episode)}/page-{row.number}", image.image, image.mime)
+                 row.status = "done"
+             else:
+                 row.status = "failed"
+@@ -249,7 +283,8 @@ async def _write_script(session, episode: Episode, series: Series, cast: list[Ch
+     max_per_page = max(1, min(studio.max_refs, len(slugs)))
+     previous = (await session.execute(
+         select(Episode.number, Episode.title, Episode.summary)
+-        .where(Episode.series_id == series.id, Episode.number < episode.number, Episode.script.is_not(None))
++        .where(Episode.series_id == series.id, Episode.number < episode.number, Episode.script.is_not(None),
++               Episode.status == "done")
+         .order_by(Episode.number.desc()).limit(8)
+     )).all()
+     context = prompts.story_context(
+@@ -343,6 +378,8 @@ async def redraw_page(page_id: str, note: str, studio: Studio | None = None) ->
+     studio = studio or get_studio()
+     async with SessionLocal() as session:
+         row = await session.get(Page, page_id)
++        if row is None:          # épisode ou série supprimés entre-temps
++            return
+         episode = await _load(session, row.episode_id)
+         series, script = episode.series, episode.script
+         cast = [ec.character for ec in episode.cast]
+@@ -352,7 +389,7 @@ async def redraw_page(page_id: str, note: str, studio: Studio | None = None) ->
+         refs = [(await storage.load(c.sheet_path), _mime(c.sheet_path)) for slug in order for c in cast if c.slug == slug and c.sheet_path]
+         try:
+             image = await _draw(studio, prompts.page_prompt(script, spec, names, order, series.style, series.palette, series.language, note[:300]), refs)
+-            row.image_path = await storage.save(f"series/{series.id}/ep{episode.number}/page-{row.number}-r{row.attempts + 1}", image.image, image.mime)
++            row.image_path = await storage.save(f"series/{series.id}/{folder(episode)}/page-{row.number}-r{row.attempts + 1}", image.image, image.mime)
+             was_done = row.status == "done"
+             row.status, row.attempts, row.editor_note = "done", row.attempts + 1, note[:300]
+             # Page déjà livrée : le redessin compte comme une image de plus ; page ratée : il devient la page livrée.
+diff --git a/backend/scripts/controle_securite.py b/backend/scripts/controle_securite.py
+index 4c77c3a..f2843de 100644
+--- a/backend/scripts/controle_securite.py
++++ b/backend/scripts/controle_securite.py
+@@ -118,4 +118,4 @@ def main() -> int:
+ 
+ 
+ if __name__ == "__main__":
+-    sys.exit(main())
+\ No newline at end of file
++    sys.exit(main())
+diff --git a/frontend/src/components/admin.tsx b/frontend/src/components/admin.tsx
+index 3ffbe5b..f00c18e 100644
+--- a/frontend/src/components/admin.tsx
++++ b/frontend/src/components/admin.tsx
+@@ -4,6 +4,7 @@ import { Button, Pill } from "./ink";
+ import { ACTIVE, STATUS_LABEL } from "@/lib/api";
+ import { num } from "@/lib/admin";
+ import { cn } from "@/lib/utils";
++import { tr } from "@/lib/i18n";
+ 
+ /** Un chiffre clé, avec une ligne de contexte. */
+ export function Stat({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: ReactNode; tone?: "alerte" }) {
+@@ -51,10 +52,10 @@ export function Table({ head, children, empty, minWidth = 720 }: { head: (string
+ export function Pager({ page, pages, total, onPage }: { page: number; pages: number; total: number; onPage: (p: number) => void }) {
+   return (
+     <div className="mt-4 flex flex-wrap items-center gap-3">
+-      <Button aria-label="Page précédente" disabled={page <= 1} onClick={() => onPage(page - 1)}><ChevronLeft size={20} strokeWidth={2} aria-hidden /></Button>
++      <Button aria-label={tr("Page précédente", "Previous page")} disabled={page <= 1} onClick={() => onPage(page - 1)}><ChevronLeft size={20} strokeWidth={2} aria-hidden /></Button>
+       <span className="tabular font-bold">{page} / {pages}</span>
+-      <Button aria-label="Page suivante" disabled={page >= pages} onClick={() => onPage(page + 1)}><ChevronRight size={20} strokeWidth={2} aria-hidden /></Button>
+-      <span className="text-[14px] text-encre-douce"><span className="tabular">{num(total)}</span> résultat{total > 1 ? "s" : ""}</span>
++      <Button aria-label={tr("Page suivante", "Next page")} disabled={page >= pages} onClick={() => onPage(page + 1)}><ChevronRight size={20} strokeWidth={2} aria-hidden /></Button>
++      <span className="text-[14px] text-encre-douce"><span className="tabular">{num(total)}</span> {total > 1 ? tr("résultats", "results") : tr("résultat", "result")}</span>
+     </div>
+   );
+ }
+diff --git a/frontend/src/components/ink.tsx b/frontend/src/components/ink.tsx
+index b263bf2..678ca21 100644
+--- a/frontend/src/components/ink.tsx
++++ b/frontend/src/components/ink.tsx
+@@ -51,12 +51,12 @@ export function Onomatopee({ children, className }: { children: ReactNode; class
+ export function ErrorNote({ error, inline }: { error: unknown; inline?: boolean }) {
+   if (!error) return null;
+   const e = error as ApiError;
+-  const msg = e?.message ?? "Une erreur est survenue.";
++  const msg = e?.message ?? tr("Une erreur est survenue.", "Something went wrong.");
+   const toPlans = e?.code === "plan_limit" || e?.code === "insufficient_credits";
+   return (
+     <p role="alert" className={cn("text-[14px] leading-5 font-medium text-alerte", !inline && "rounded-[4px] border-2 border-alerte bg-bulle p-3")}>
+-      <span className="font-bold">Erreur : </span>{msg}
+-      {toPlans && (<> {" "}<Link to="/abonnements" className="font-bold text-indigo underline">Voir les abonnements</Link></>)}
++      <span className="font-bold">{tr("Erreur : ", "Error: ")}</span>{msg}
++      {toPlans && (<> {" "}<Link to="/abonnements" className="font-bold text-indigo underline">{tr("Voir les abonnements", "See plans")}</Link></>)}
+     </p>
+   );
+ }
+@@ -76,6 +76,7 @@ export function Container({ children, className }: { children: ReactNode; classN
+ 
+ import { Navigate } from "@tanstack/react-router";
+ import { useMe, useToken } from "@/lib/session";
++import { tr } from "@/lib/i18n";
+ /** Exige une connexion et, sauf `allowUnverified`, une adresse e-mail confirmée. */
+ export function RequireAuth({ children, allowUnverified = false }: { children: ReactNode; allowUnverified?: boolean }) {
+   const token = useToken();
+diff --git a/frontend/src/content/concours.ts b/frontend/src/content/concours.ts
+index fa4e933..bc05abe 100644
+--- a/frontend/src/content/concours.ts
++++ b/frontend/src/content/concours.ts
+@@ -37,12 +37,49 @@ Seuls le nom d'auteur et l'histoire sont montrés publiquement. L'adresse e-mail
+ 10. Contact
+ Pour toute question : page « Nous contacter ».`;
+ 
++/** Version anglaise du règlement type, pour le champ « Règlement (anglais) » d'un concours. */
++export const REGLEMENT_TYPE_EN = `1. Organiser
++The contest is organised by MangaStudio (PsikaLab). Entry is free: no purchase is necessary.
++
++2. Who can enter
++Anyone with a confirmed MangaStudio account. Team and jury members cannot compete.
++
++3. How to enter
++Create a chapter on MangaStudio during the contest period, submit it to the "Read" gallery, then enter it from the contest page. The chapter must follow the theme, the required style if there is one, and the gallery's publishing rules.
++
++4. What is refused
++Chapters that reuse characters, universes or brands belonging to others, chapters that break the publishing rules, and any attempt to rig likes (fake accounts, multiple accounts, buying or trading likes). The organiser can disqualify a chapter, giving the reason.
++
++5. Ranking
++Jury score out of 20 (60%): fit with the theme, originality of the story, quality of the storytelling.
++Likes received during the contest (40%): the most liked story gets 20, the others in proportion.
++In case of a tie, the story with the most likes goes first, then the one entered first.
++
++6. Prizes
++Prizes are listed on the contest page. They are credited automatically to the winners' accounts when the results are announced. They cannot be exchanged or converted into money.
++
++7. Results
++Results are published on the contest page after the jury's deliberation. Winning chapters stay in the gallery with their prize shown.
++
++8. Rights
++Each author remains the owner of their story. By entering, they allow MangaStudio to show it on the platform and to show excerpts to announce the contest and its results, always with their author name.
++
++9. Data
++Only the author name and the story are shown publicly. The email address is never shown.
++
++10. Contact
++For any question: "Contact us" page.`;
++
+ /** Premier concours prévu au planning : du 21 décembre au 17 janvier, en afro-manga. */
+ export const CONTES_AFRIQUE = {
+   title: "Contes et légendes d'Afrique",
+   theme: "Revisitez un conte, une légende ou un mythe d'Afrique en afro-manga.",
+   description:
+     "Mami Wata, Soundiata, la tortue et ses ruses, les esprits de la forêt… Choisissez un conte que vous connaissez, ou inventez une légende de votre village, et racontez-le à votre façon en un chapitre d'afro-manga. Le jury regarde le respect du thème, l'originalité et la façon de raconter ; les lecteurs votent avec leurs « j'aime ».",
++  title_en: "African Tales and Legends",
++  theme_en: "Retell an African tale, legend or myth in afro-manga.",
++  description_en:
++    "Mami Wata, Sundiata, the tortoise and its tricks, the spirits of the forest… Pick a tale you know, or invent a legend from your village, and tell it your way in one afro-manga chapter. The jury looks at the fit with the theme, originality and storytelling; readers vote with their likes.",
+   style: "afro",
+   starts: "2026-12-21T00:00",
+   ends: "2027-01-17T23:59",
+diff --git a/frontend/src/content/contact.ts b/frontend/src/content/contact.ts
+index ff9bbdc..bf3c442 100644
+--- a/frontend/src/content/contact.ts
++++ b/frontend/src/content/contact.ts
+@@ -3,11 +3,12 @@
+  * Un champ laissé vide n'est pas affiché. Numéros au format international : +237 6XX XX XX XX.
+  */
+ export const CONTACT = {
+-  email: "contact@psikalab.space",                 // ex. contact@psikalab.space
+-  orange: "6 95 24 95 49",                // numéro Orange (appels, WhatsApp si `whatsapp` vaut true)
+-  mtn: "6 75 65 99 36",                   // numéro MTN
+-  whatsapp: true,           // true : ajoute un lien WhatsApp sur les numéros
++  email: "",                 // ex. contact@psikalab.space
++  orange: "",                // numéro Orange (appels, WhatsApp si `whatsapp` vaut true)
++  mtn: "",                   // numéro MTN
++  whatsapp: false,           // true : ajoute un lien WhatsApp sur les numéros
+   horaires: "Du lundi au samedi, 8 h – 18 h (heure de Douala)",
++  horairesEn: "Monday to Saturday, 8 am – 6 pm (Douala time)",
+ };
+ 
+ /**
+@@ -16,6 +17,6 @@ export const CONTACT = {
+  * pour qu'il sache que c'est le bon destinataire.
+  */
+ export const DONS_DIRECTS = {
+-  orangeMoney: { numero: "6 95 24 95 49", titulaire: "" },
+-  mtnMomo: { numero: "6 75 65 9936", titulaire: "" },
++  orangeMoney: { numero: "", titulaire: "" },
++  mtnMomo: { numero: "", titulaire: "" },
+ };
+diff --git a/frontend/src/content/faq.ts b/frontend/src/content/faq.ts
+index db7d898..8c53358 100644
+--- a/frontend/src/content/faq.ts
++++ b/frontend/src/content/faq.ts
+@@ -1,7 +1,9 @@
+-/** Questions fréquentes, par rubrique. Le texte accepte des retours à la ligne simples. */
++import { pick } from "@/lib/i18n";
++
++/** Questions fréquentes, par rubrique (français et anglais). Le texte accepte des retours à la ligne simples. */
+ export type Question = { q: string; r: string };
+ 
+-export const FAQ: { rubrique: string; questions: Question[] }[] = [
++const FAQ_FR: { rubrique: string; questions: Question[] }[] = [
+   {
+     rubrique: "Découvrir MangaStudio",
+     questions: [
+@@ -56,3 +58,62 @@ export const FAQ: { rubrique: string; questions: Question[] }[] = [
+     ],
+   },
+ ];
++
++const FAQ_EN: { rubrique: string; questions: Question[] }[] = [
++  {
++    rubrique: "Discover MangaStudio",
++    questions: [
++      { q: "What is MangaStudio?", r: "An online manga studio. You describe a story and your characters; MangaStudio writes the script, then draws every page, with speech balloons, in the style you choose: shōnen, shōjo, seinen, kodomo or afro-manga." },
++      { q: "Which style should I choose?", r: "Shōnen for action and adventure, shōjo for emotions and romance, seinen for adult, realistic stories, kodomo for children, afro-manga for African characters and settings. The “Styles” page shows an example of each." },
++      { q: "Do I need to know how to draw?", r: "No. Just tell your idea in a few lines and introduce your characters. You can then guide each episode: what should happen, the mood, the ending." },
++      { q: "How long does an episode take?", r: "A few minutes, depending on the number of pages. You follow the progress live: script, character sheets, then each page as it is drawn." },
++      { q: "What language are the balloons in?", r: "French or English: you choose the language when you create the series." },
++      { q: "Do characters stay the same from page to page?", r: "Yes. Each character gets a model sheet (face, hair, outfit) used as the reference for every page and every episode of the series." },
++    ],
++  },
++  {
++    rubrique: "Credits and payment",
++    questions: [
++      { q: "What is a credit?", r: "One credit = one delivered image: a page, a character sheet or a cover. The number of credits needed is shown before you start the episode." },
++      { q: "How can I earn free credits?", r: "Three ways, detailed on the “Earn credits” page: invite friends with your link (they get 5 credits, you get 10 when they finish their first episode, then 25 on their first purchase), complete missions (first episode, first share, published review), and the weekly top-up: on the free plan, your balance goes back up to 5 credits on your first visit of the week." },
++      { q: "What happens if an episode is interrupted?", r: "Credits are reserved at launch, then only the images actually delivered are charged. If an episode stops along the way, credits for undelivered images are refunded, and you can resume the episode." },
++      { q: "How do I pay?", r: "By mobile money, MTN Mobile Money or Orange Money. Choose the operator, enter your number and confirm the payment on your phone. Your plan is activated as soon as the payment is confirmed." },
++      { q: "Does the subscription renew automatically?", r: "No. A paid plan is active for 30 days, with no automatic charge. You renew it whenever you want from the Plans page." },
++      { q: "Do my credits expire?", r: "Plan credits are valid for the 30-day period. Credits from a credit pack never expire." },
++      { q: "I paid but my plan isn't active.", r: "Wait a few minutes: the operator's confirmation can be delayed, and the page updates by itself. If nothing changes, write to us with the date, the amount and the number you used." },
++    ],
++  },
++  {
++    rubrique: "Characters and photos",
++    questions: [
++      { q: "Can I give a character a photo?", r: "Yes, in JPEG, PNG or WebP, 3 MB maximum. Only use your own photo or one of a person who has given you their consent: you are asked to confirm it when uploading." },
++      { q: "How many characters per episode?", r: "It depends on your plan: details are on the Pricing page. The Studio plan allows up to 10." },
++    ],
++  },
++  {
++    rubrique: "Content and rules",
++    questions: [
++      { q: "Why was my request refused?", r: "MangaStudio refuses sexual content, anything involving minors inappropriately, extreme violence shown in detail, hatred towards a group, glorification of terrorism, and humiliating depictions of real people. A refusal happens before drawing: no credits are charged." },
++      { q: "“Drawing capacity reached for today”: what does it mean?", r: "To control its costs, the platform sets a daily drawing limit. When it is reached, new episodes are refused until the next day, without charging credits. Episodes already started run to the end." },
++    ],
++  },
++  {
++    rubrique: "My account",
++    questions: [
++      { q: "I don't receive the confirmation code.", r: "Check your spam folder, then use “Resend the code” after a minute. Also check the address shown: if it's wrong, “Wrong address? Start over” lets you sign up again. Temporary addresses (yopmail, mailinator…) are not accepted." },
++      { q: "Why confirm my email address?", r: "So that free credits go to real people: without confirmation, bots could create accounts one after another and use up the platform's drawing capacity. Your free credits arrive as soon as you confirm." },
++      { q: "I forgot my password.", r: "On the sign-in page, click “Forgot your password?” and enter your address: you'll receive a code by email to choose a new password. Your other devices are then signed out." },
++      { q: "How do I leave a review?", r: "At the end of an episode, or at any time from “Leave a review” at the bottom of the page. It is published on the home page after a quick check, with the name you choose, never your email address. You can edit or remove it whenever you like." },
++      { q: "How do I delete my account?", r: "Write to us from your account's email address; your series, characters and photos will be deleted." },
++    ],
++  },
++  {
++    rubrique: "Support us",
++    questions: [
++      { q: "What are donations used for?", r: "To pay for the servers and the AI models that draw the mangas, to keep prices affordable and a free plan available. A donation doesn't give credits: it's support. Thank you!" },
++    ],
++  },
++];
++
++/** Les questions dans la langue courante. */
++export const faq = () => pick({ fr: FAQ_FR, en: FAQ_EN });
+diff --git a/frontend/src/content/publication.ts b/frontend/src/content/publication.ts
+index c4d6217..65e1968 100644
+--- a/frontend/src/content/publication.ts
++++ b/frontend/src/content/publication.ts
+@@ -1,3 +1,5 @@
++import { pick } from "@/lib/i18n";
++
+ /**
+  * Règles de publication dans la galerie « À lire ».
+  *
+@@ -7,8 +9,9 @@
+  */
+ export const VALIDE = false;
+ export const MISE_A_JOUR = "24 novembre 2026";
++export const MISE_A_JOUR_EN = "24 November 2026";
+ 
+-export const REGLES: { titre: string; points: string[] }[] = [
++const REGLES_FR: { titre: string; points: string[] }[] = [
+   {
+     titre: "Ce que vous publiez",
+     points: [
+@@ -52,3 +55,52 @@ export const REGLES: { titre: string; points: string[] }[] = [
+     ],
+   },
+ ];
++
++const REGLES_EN: { titre: string; points: string[] }[] = [
++  {
++    titre: "What you publish",
++    points: [
++      "You publish a story you created yourself on MangaStudio: the idea, the characters and the text are yours.",
++      "No characters, brands or universes that belong to others (well-known manga or film heroes, logos…), unless you have written permission.",
++      "No recognisable real people shown in a humiliating or misleading way, or without their consent.",
++    ],
++  },
++  {
++    titre: "What is refused",
++    points: [
++      "Any sexual content involving minors, without exception, and any explicit sexual content.",
++      "Calls for hatred or violence against people or groups (origin, religion, sex, disability…).",
++      "Gratuitous violence shown approvingly, glorification of terrorism or crime.",
++      "Other people's personal information (numbers, addresses…) and scams.",
++    ],
++  },
++  {
++    titre: "Review by the team",
++    points: [
++      "Every chapter is reviewed before it appears in the gallery. The review can take a few days.",
++      "The team can refuse or remove a chapter; the reason is shown to you on the episode page.",
++      "Once corrected, you can submit your chapter again.",
++    ],
++  },
++  {
++    titre: "Your rights",
++    points: [
++      "You remain the owner of your story.",
++      "By publishing it, you allow MangaStudio to show it for free in the gallery and on the home page, and to show excerpts to promote the platform, always with your author name.",
++      "You can remove your chapter from the gallery at any time, from the episode page. It then disappears from the gallery and the home page.",
++      "Your author name is shown; your email address never is.",
++    ],
++  },
++  {
++    titre: "Likes",
++    points: [
++      "One like per confirmed account and per story. You can't like your own story.",
++      "Buying, trading or faking likes (fake accounts, multiple accounts) is forbidden: those likes are cancelled and the story may be removed.",
++      "“Most liked this week” counts likes from the last 7 days. “Staff picks” are chosen by the team.",
++    ],
++  },
++];
++
++/** Les règles dans la langue courante. */
++export const regles = () => pick({ fr: REGLES_FR, en: REGLES_EN });
++export const miseAJour = () => pick({ fr: MISE_A_JOUR, en: MISE_A_JOUR_EN });
+diff --git a/frontend/src/content/styles.ts b/frontend/src/content/styles.ts
+index 786635a..40d6244 100644
+--- a/frontend/src/content/styles.ts
++++ b/frontend/src/content/styles.ts
+@@ -1,5 +1,7 @@
++import { pick } from "@/lib/i18n";
++
+ /**
+- * Les styles de dessin proposés à la création d'une série.
++ * Les styles de dessin proposés à la création d'une série (français et anglais).
+  * L'identifiant (id) doit correspondre à celui de l'API (backend/app/pipeline/prompts.py).
+  * Image d'exemple : frontend/public/styles/<id>.webp, produite par  python -m scripts.exemples_styles
+  */
+@@ -14,7 +16,7 @@ export type StyleManga = {
+   nouveau?: boolean;
+ };
+ 
+-export const STYLES_MANGA: StyleManga[] = [
++const STYLES_FR: StyleManga[] = [
+   {
+     id: "shonen",
+     nom: "Shōnen",
+@@ -62,4 +64,46 @@ export const STYLES_MANGA: StyleManga[] = [
+   },
+ ];
+ 
+-export const styleParId = (id: string) => STYLES_MANGA.find((s) => s.id === id);
++const STYLES_EN: StyleManga[] = [
++  {
++    id: "shonen", nom: "Shōnen", origine: "“young boy” in Japanese",
++    accroche: "Action, fights and pushing your limits",
++    description: "The style of great adventures: energetic lines, speed lines, spectacular framing and heroes who never give up. Emotions run high and action scenes fill the whole page.",
++    ideal: ["Adventure", "Fights", "Rivalry", "Sports", "Fantasy"],
++    reperes: "Naruto, One Piece, Dragon Ball",
++  },
++  {
++    id: "shojo", nom: "Shōjo", origine: "“young girl” in Japanese",
++    accroche: "Emotions, relationships and romance",
++    description: "Fine, delicate lines, big expressive eyes, backgrounds decorated with flowers or light. Shōjo puts feelings first: friendships, love, doubts and slices of life.",
++    ideal: ["Romance", "Friendship", "High-school life", "Magic", "Drama"],
++    reperes: "Sailor Moon, Fruits Basket, Card Captor Sakura",
++  },
++  {
++    id: "seinen", nom: "Seinen", origine: "“young man” in Japanese, for an adult audience",
++    accroche: "Adult, dark or realistic stories",
++    description: "Realistic proportions, deep shadows and lots of detail. Seinen tells more complex and serious stories: investigations, wars, moral questions, adult life.",
++    ideal: ["Crime", "Thriller", "History", "Science fiction", "Social drama"],
++    reperes: "Monster, Vagabond, Vinland Saga",
++  },
++  {
++    id: "kodomo", nom: "Kodomo", origine: "“child” in Japanese",
++    accroche: "For children: simple, gentle and funny",
++    description: "Round shapes, thick outlines and smiling faces. Kodomo is for the youngest readers: short stories, humour, talking animals and little life lessons.",
++    ideal: ["Tales", "Humour", "Animals", "Learning", "Bedtime stories"],
++    reperes: "Doraemon, Pokémon, Hamtaro",
++  },
++  {
++    id: "afro", nom: "Afro-manga", origine: "manga told from Africa",
++    accroche: "African characters and settings, manga energy",
++    description: "Manga panelling and inking in the service of African characters and places: markets, moto-taxis, neighbourhoods, villages, savannah and forest. Skin tones, hairstyles (braids, locs, headwraps) and fabrics (wax, kente, bogolan, ndop) are drawn with care, and patterns become graphic screentones.",
++    ideal: ["Local stories", "Legends and tales", "Neighbourhood life", "Afrofuturism", "Adventure"],
++    nouveau: true,
++  },
++];
++
++/** Les styles dans la langue courante. */
++export const stylesManga = () => pick({ fr: STYLES_FR, en: STYLES_EN });
++/** Compatibilité : la liste (dans la langue courante au moment de l'appel). */
++export const STYLES_MANGA = STYLES_FR;
++export const styleParId = (id: string) => stylesManga().find((s) => s.id === id);
+diff --git a/frontend/src/lib/admin.ts b/frontend/src/lib/admin.ts
+index d56da60..49b0868 100644
+--- a/frontend/src/lib/admin.ts
++++ b/frontend/src/lib/admin.ts
+@@ -64,6 +64,6 @@ export const PLAN_LABEL: Record<string, string> = { free: "Découverte", creator
+ export const KIND_LABEL: Record<string, string> = { grant: "Attribution", reserve: "Réserve", refund: "Remboursement", expire: "Retrait ou expiration" };
+ export const CHECKPOINT_LABEL: Record<string, string> = { input: "Saisie", script: "Scénario", image: "Image" };
+ export const ACTION_LABEL: Record<string, string> = {
+-  credits: "Crédits", plan: "Plan", suspend: "Suspension", reactivate: "Réactivation", role: "Rôle", term: "Mot bloqué", scene_rule: "Scène interdite", budget_alert: "Alerte budget IA", testimonial: "Avis", verify_email: "Adresse confirmée", referral: "Parrainage", publication: "Publication", episode_abandon: "Épisode abandonné", episode_delete: "Épisode supprimé", series_delete: "Série supprimée",
++  credits: "Crédits", plan: "Plan", suspend: "Suspension", reactivate: "Réactivation", role: "Rôle", term: "Mot bloqué", scene_rule: "Scène interdite", budget_alert: "Alerte budget IA", testimonial: "Avis", verify_email: "Adresse confirmée", referral: "Parrainage", publication: "Publication", episode_abandon: "Épisode abandonné", episode_delete: "Épisode supprimé", series_delete: "Série supprimée", contest: "Concours", contest_results: "Résultats de concours",
+ };
+ export const INTENT_LABEL: Record<string, string> = { pending: "En attente", paid: "Payé", failed: "Échoué" };
+diff --git a/frontend/src/lib/api.ts b/frontend/src/lib/api.ts
+index d6f0291..81824c9 100644
+--- a/frontend/src/lib/api.ts
++++ b/frontend/src/lib/api.ts
+@@ -1,3 +1,5 @@
++import { getLang, tr } from "@/lib/i18n";
++
+ const TOKEN_KEY = "mangastudio.token";
+ const BASE = (import.meta.env['VITE_API_URL'] as string | undefined) ?? "http://localhost:8000";
+ 
+@@ -5,12 +7,12 @@ const listeners = new Set<() => void>();
+ /** Téléchargement d'un fichier protégé (ex. PDF) : le jeton part dans l'en-tête, puis le navigateur enregistre. */
+ export async function downloadFile(path: string, filename: string): Promise<void> {
+   const token = tokenStore.get();
+-  const r = await fetch(`${BASE}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
++  const r = await fetch(`${BASE}${path}`, { headers: { "Accept-Language": getLang(), ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
+   if (!r.ok) {
+     let detail: unknown = null;
+     try { detail = (await r.json()).detail; } catch { /* réponse non JSON */ }
+     const d = detail as { message?: string; code?: string } | string | null;
+-    throw new ApiError(typeof d === "string" ? d : d?.message ?? "Téléchargement impossible.", r.status, typeof d === "object" && d ? d.code : undefined);
++    throw new ApiError(typeof d === "string" ? d : d?.message ?? tr("Téléchargement impossible.", "Download failed."), r.status, typeof d === "object" && d ? d.code : undefined);
+   }
+   const url = URL.createObjectURL(await r.blob());
+   const a = document.createElement("a");
+@@ -44,13 +46,14 @@ export async function api<T>(path: string, opts: { method?: string; body?: unkno
+     res = await fetch(BASE + path, {
+       method: opts.method ?? (opts.body ? "POST" : "GET"),
+       headers: {
++        "Accept-Language": getLang(),
+         ...(opts.body ? { "Content-Type": "application/json" } : {}),
+         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+       },
+       body: opts.body ? JSON.stringify(opts.body) : null,
+     });
+   } catch {
+-    throw new ApiError("Le studio est injoignable pour le moment. Réessayez dans un instant.", 0);
++    throw new ApiError(tr("Le studio est injoignable pour le moment. Réessayez dans un instant.", "The studio can't be reached right now. Please try again in a moment."), 0);
+   }
+   if (res.status === 401 && token) {
+     tokenStore.set(null);
+@@ -66,9 +69,10 @@ export async function api<T>(path: string, opts: { method?: string; body?: unkno
+     // Erreur de validation de l'API : `detail` est une liste de champs refusés.
+     if (Array.isArray(detail)) {
+       const fields = detail.map((d) => String((d as { loc?: unknown[] }).loc?.at(-1) ?? "")).filter(Boolean);
+-      throw new ApiError(`Certains champs sont invalides${fields.length ? ` (${fields.join(", ")})` : ""}. Vérifiez le formulaire.`, res.status, "validation");
++      const list = fields.length ? ` (${fields.join(", ")})` : "";
++      throw new ApiError(tr(`Certains champs sont invalides${list}. Vérifiez le formulaire.`, `Some fields are invalid${list}. Please check the form.`), res.status, "validation");
+     }
+-    throw new ApiError(typeof detail === "string" ? detail : "Une erreur est survenue.", res.status);
++    throw new ApiError(typeof detail === "string" ? detail : tr("Une erreur est survenue.", "Something went wrong."), res.status);
+   }
+   if (res.status === 204) return undefined as T;
+   return res.json() as Promise<T>;
+@@ -78,7 +82,7 @@ export async function api<T>(path: string, opts: { method?: string; body?: unkno
+ export type Plan = { id: string; name: string; max_characters: number; max_pages: number; color: boolean; redraw: boolean };
+ export type Me = {
+   id: string; email: string; is_admin: boolean; email_verified: boolean;
+-  display_name: string; credits: number; plan: Plan; weekly_refill?: number;
++  display_name: string; credits: number; plan: Plan; weekly_refill?: number; locale?: string | null;
+   subscription?: { status: string; provider: string; period_end: string } | null;
+ };
+ /** `premise` est l'idée de départ saisie à la création (l'API ne renvoie pas de champ `pitch`). */
+@@ -103,6 +107,16 @@ export const STATUS_LABEL: Record<string, string> = {
+   moderating: "Vérification du contenu", drawing: "Dessin des pages", done: "Terminé",
+   blocked: "Refusé", failed: "Interrompu", canceled: "Abandonné",
+ };
++const STATUS_LABEL_EN: Record<string, string> = {
++  queued: "Queued", designing: "Designing characters", writing: "Writing the script",
++  moderating: "Checking content", drawing: "Drawing pages", done: "Done",
++  blocked: "Refused", failed: "Interrupted", canceled: "Abandoned",
++};
++/** Libellé d'un statut d'épisode dans la langue courante (STATUS_LABEL reste en français pour l'administration). */
++export const statusLabel = (s: string) => (getLang() === "en" ? STATUS_LABEL_EN : STATUS_LABEL)[s] ?? s;
++/** Nom d'un plan dans la langue courante (l'API renvoie le nom français). */
++export const planName = (id: string, fallback: string) =>
++  getLang() === "en" ? ({ free: "Discovery", creator: "Creator", studio: "Studio" } as Record<string, string>)[id] ?? fallback : fallback;
+ 
+ /** Réduit une photo à 1280 px et la convertit en JPEG : l'API n'accepte que JPEG, PNG ou WebP, 3 Mo au plus. */
+ export async function photoToDataUrl(file: File, max = 1280): Promise<string> {
+diff --git a/frontend/src/lib/concours.ts b/frontend/src/lib/concours.ts
+index d056ca7..d473eed 100644
+--- a/frontend/src/lib/concours.ts
++++ b/frontend/src/lib/concours.ts
+@@ -1,5 +1,6 @@
+ // Concours : formes renvoyées par l'API.
+ import type { CarteHistoire } from "@/lib/galerie";
++import { getLang, intlLocale, tr } from "@/lib/i18n";
+ 
+ export type Phase = "a_venir" | "en_cours" | "deliberation" | "termine";
+ export type Lot = { rank: number; credits: number; studio_days: number; label: string };
+@@ -7,6 +8,8 @@ export type Concours = {
+   id: string; slug: string; title: string; theme: string; description: string; rules: string; style: string;
+   new_only: boolean; max_entries: number; prizes: Lot[]; starts_at: string; ends_at: string; results_at: string | null;
+   visible: boolean; phase: Phase; phase_label: string; entries: number;
++  // administration seulement : version anglaise telle qu'enregistrée
++  title_en?: string; theme_en?: string; description_en?: string; rules_en?: string;
+ };
+ export type Participation = CarteHistoire & {
+   entry_id: string; contest_likes: number; rank: number | null; score: number | null; prize: string; jury_score: number | null;
+@@ -23,19 +26,25 @@ export const PHASE_TON: Record<Phase, "succes" | "soleil" | "indigo" | "bulle">
+   en_cours: "succes", a_venir: "soleil", deliberation: "indigo", termine: "bulle",
+ };
+ 
+-export const rangLabel = (r: number) => (r === 1 ? "1er prix" : `${r}e prix`);
++export function rangLabel(r: number): string {
++  if (getLang() === "en") {
++    const suffix = r % 100 >= 10 && r % 100 <= 20 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[r % 10] ?? "th";
++    return `${r}${suffix} prize`;
++  }
++  return r === 1 ? "1er prix" : `${r}e prix`;
++}
+ 
+-const fmt = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+-const fmtH = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+-export const dateLongue = (iso: string) => fmt.format(new Date(iso));
+-export const dateHeure = (iso: string) => fmtH.format(new Date(iso));
++export const dateLongue = (iso: string) =>
++  new Intl.DateTimeFormat(intlLocale(), { day: "numeric", month: "long", year: "numeric" }).format(new Date(iso));
++export const dateHeure = (iso: string) =>
++  new Intl.DateTimeFormat(intlLocale(), { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+ 
+ /** « dans 3 jours », « dans 5 h » : le temps qui reste avant une date. */
+ export function reste(iso: string): string {
+   const ms = new Date(iso).getTime() - Date.now();
+-  if (ms <= 0) return "terminé";
++  if (ms <= 0) return tr("terminé", "ended");
+   const h = Math.floor(ms / 3_600_000);
+-  if (h >= 48) return `${Math.floor(h / 24)} jours`;
++  if (h >= 48) return tr(`${Math.floor(h / 24)} jours`, `${Math.floor(h / 24)} days`);
+   if (h >= 1) return `${h} h`;
+   return `${Math.max(1, Math.floor(ms / 60_000))} min`;
+ }
+diff --git a/frontend/src/lib/galerie.ts b/frontend/src/lib/galerie.ts
+index f2a2e11..d71ea3d 100644
+--- a/frontend/src/lib/galerie.ts
++++ b/frontend/src/lib/galerie.ts
+@@ -1,10 +1,12 @@
++import { tr } from "@/lib/i18n";
++
+ // Galerie publique « À lire » : formes renvoyées par l'API.
+ export type CarteHistoire = {
+   id: string; series_title: string; number: number; title?: string | null; style?: string | null; author: string;
+   cover_url?: string | null; pages: number; likes: number; liked: boolean; featured: boolean; published_at: string | null;
+   likes_week?: number;
+ };
+-export type Histoire = CarteHistoire & { premise: string; page_urls: string[]; is_author: boolean };
++export type Histoire = CarteHistoire & { premise: string; page_urls: string[]; is_author: boolean; awards?: { rank: number; label: string; slug: string }[] };
+ export type PageGalerie = { items: CarteHistoire[]; total: number; page: number; size: number; pages: number };
+ export type TriGalerie = "recentes" | "populaires" | "semaine" | "coups";
+ 
+@@ -15,4 +17,4 @@ export type MaPublication = {
+ } | null;
+ 
+ export const titreHistoire = (c: Pick<CarteHistoire, "series_title" | "number" | "title">) =>
+-  `${c.series_title} — ${c.title || `Épisode ${c.number}`}`;
++  `${c.series_title} — ${c.title || tr(`Épisode ${c.number}`, `Episode ${c.number}`)}`;
+diff --git a/frontend/src/lib/i18n.ts b/frontend/src/lib/i18n.ts
+new file mode 100644
+index 0000000..6befc7e
+--- /dev/null
++++ b/frontend/src/lib/i18n.ts
+@@ -0,0 +1,73 @@
++/**
++ * Français / anglais.
++ *
++ * Usage dans un composant :   const { t, lang, locale } = useT();   t("Bonjour", "Hello")
++ * Hors composant :            tr("Bonjour", "Hello")   (lit la langue courante)
++ *
++ * La langue : choix mémorisé dans le navigateur, sinon celle du navigateur (français si elle commence
++ * par « fr », anglais sinon). Le bouton FR / EN la change partout et l'enregistre dans le compte.
++ * L'administration reste en français.
++ */
++import { useSyncExternalStore } from "react";
++
++export type Lang = "fr" | "en";
++const KEY = "mangastudio.lang";
++const listeners = new Set<() => void>();
++
++function detect(): Lang {
++  if (typeof window === "undefined") return "fr";
++  try {
++    const saved = localStorage.getItem(KEY);
++    if (saved === "fr" || saved === "en") return saved;
++  } catch { /* stockage indisponible */ }
++  const nav = (navigator.languages?.[0] ?? navigator.language ?? "fr").toLowerCase();
++  return nav.startsWith("fr") ? "fr" : "en";
++}
++
++let current: Lang = detect();
++if (typeof document !== "undefined") document.documentElement.lang = current;
++
++export const getLang = (): Lang => current;
++
++export function setLang(l: Lang, opts: { remember?: boolean } = { remember: true }): void {
++  if (l === current) return;
++  current = l;
++  if (opts.remember !== false) {
++    try { localStorage.setItem(KEY, l); } catch { /* stockage indisponible */ }
++  }
++  if (typeof document !== "undefined") document.documentElement.lang = l;
++  listeners.forEach((fn) => fn());
++}
++
++/** Le compte a une langue enregistrée : elle s'applique, sauf si ce navigateur a déjà un choix explicite. */
++export function adoptAccountLang(l: string | null | undefined): void {
++  if (l !== "fr" && l !== "en") return;
++  let saved: string | null = null;
++  try { saved = localStorage.getItem(KEY); } catch { /* */ }
++  if (!saved) setLang(l);
++}
++
++const subscribe = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
++
++export function useLang(): Lang {
++  return useSyncExternalStore(subscribe, getLang, () => "fr");
++}
++
++export const tr = (fr: string, en: string): string => (current === "en" ? en : fr);
++
++/** Locale Intl de la langue courante, pour les dates et les nombres. */
++export const intlLocale = (l: Lang = current) => (l === "en" ? "en-GB" : "fr-FR");
++
++export function useT() {
++  const lang = useLang();
++  return {
++    lang,
++    locale: intlLocale(lang),
++    t: (fr: string, en: string) => (lang === "en" ? en : fr),
++  };
++}
++
++/** Choisit la version d'un contenu bilingue : { fr, en }. */
++export function pick<T>(v: { fr: T; en: T }, l: Lang = current): T {
++  return l === "en" ? v.en : v.fr;
++}
+diff --git a/frontend/src/routes/concours.$slug.tsx b/frontend/src/routes/concours.$slug.tsx
+index 6770bc0..67f31ff 100644
+--- a/frontend/src/routes/concours.$slug.tsx
++++ b/frontend/src/routes/concours.$slug.tsx
+@@ -10,9 +10,10 @@ import { styleParId } from "@/content/styles";
+ import { CarteHistoire } from "@/components/galerie/CarteHistoire";
+ import { btnClass, Button, Card, Container, ErrorNote, Pill } from "@/components/ink";
+ import { cn } from "@/lib/utils";
++import { tr } from "@/lib/i18n";
+ 
+ export const Route = createFileRoute("/concours/$slug")({
+-  head: () => ({ meta: [{ title: "Concours — MangaStudio" }] }),
++  head: () => ({ meta: [{ title: tr("Concours — MangaStudio", "Contest — MangaStudio") }] }),
+   component: PageConcours,
+ });
+ 
+@@ -21,18 +22,18 @@ function PageConcours() {
+   const token = useToken();
+   const { data: c, error, isLoading } = useQuery({ queryKey: ["concours", slug, !!token], queryFn: () => api<ConcoursDetail>(`/contests/${slug}`) });
+   const [regles, setRegles] = useState(false);
+-  if (isLoading) return <Container><p className="text-encre-douce">Chargement…</p></Container>;
+-  if (error || !c) return <Container><ErrorNote error={error ?? new Error("Concours introuvable.")} /></Container>;
++  if (isLoading) return <Container><p className="text-encre-douce">{tr("Chargement…", "Loading…")}</p></Container>;
++  if (error || !c) return <Container><ErrorNote error={error ?? new Error(tr("Concours introuvable.", "Contest not found."))} /></Container>;
+   const style = c.style ? styleParId(c.style)?.nom : null;
+ 
+   return (
+     <Container className="max-w-[1100px]">
+       <Link to="/concours" className="mb-6 inline-flex min-h-11 items-center gap-1 font-bold hover:underline">
+-        <ChevronLeft size={18} strokeWidth={2.5} aria-hidden />Tous les concours
++        <ChevronLeft size={18} strokeWidth={2.5} aria-hidden />{tr("Tous les concours", "All contests")}
+       </Link>
+       <div className="flex flex-wrap items-center gap-2">
+         <Pill tone={PHASE_TON[c.phase]}>{c.phase_label}</Pill>
+-        {style && <Pill>Style imposé : {style}</Pill>}
++        {style && <Pill>{tr("Style imposé : ", "Required style: ")}{style}</Pill>}
+       </div>
+       <h1 className="mt-3 font-display text-[36px] leading-[42px] sm:text-[44px] sm:leading-[50px]">{c.title}</h1>
+       {c.theme && <p className="mt-2 max-w-3xl text-[19px] leading-8">{c.theme}</p>}
+@@ -41,19 +42,19 @@ function PageConcours() {
+         <div className="min-w-0">
+           {c.description && <p className="whitespace-pre-line text-[17px] leading-7">{c.description}</p>}
+           <dl className="mt-6 grid gap-4 sm:grid-cols-3">
+-            <Info t="Ouverture" v={dateHeure(c.starts_at)} />
+-            <Info t="Clôture" v={dateHeure(c.ends_at)} s={c.phase === "en_cours" ? `dans ${reste(c.ends_at)}` : undefined} />
+-            <Info t="Participants" v={String(c.entries)} />
++            <Info t={tr("Ouverture", "Opens")} v={dateHeure(c.starts_at)} />
++            <Info t={tr("Clôture", "Closes")} v={dateHeure(c.ends_at)} s={c.phase === "en_cours" ? tr(`dans ${reste(c.ends_at)}`, `in ${reste(c.ends_at)}`) : undefined} />
++            <Info t={tr("Participants", "Entries")} v={String(c.entries)} />
+           </dl>
+           <p className="mt-6 text-[15px] leading-6 text-encre-douce">
+-            <b className="text-encre">Classement :</b> note du jury sur 20 (60 %) + « j'aime » reçus pendant le concours (40 %).
+-            {c.new_only && " Seuls les chapitres créés depuis l'ouverture du concours sont acceptés."}
+-            {c.max_entries > 1 ? ` Jusqu'à ${c.max_entries} histoires par participant.` : " Une histoire par participant."}
++            <b className="text-encre">{tr("Classement :", "Ranking:")}</b>{tr(" note du jury sur 20 (60 %) + « j'aime » reçus pendant le concours (40 %).", " jury score out of 20 (60%) + likes received during the contest (40%).")}
++            {c.new_only && tr(" Seuls les chapitres créés depuis l'ouverture du concours sont acceptés.", " Only chapters created since the contest opened are accepted.")}
++            {c.max_entries > 1 ? tr(` Jusqu'à ${c.max_entries} histoires par participant.`, ` Up to ${c.max_entries} stories per entrant.`) : tr(" Une histoire par participant.", " One story per entrant.")}
+           </p>
+           {c.rules && (
+             <div className="mt-4">
+               <button type="button" className="min-h-11 font-bold text-indigo underline" aria-expanded={regles} onClick={() => setRegles(!regles)}>
+-                {regles ? "Masquer le règlement" : "Lire le règlement complet"}
++                {regles ? tr("Masquer le règlement", "Hide the rules") : tr("Lire le règlement complet", "Read the full rules")}
+               </button>
+               {regles && <div className="mt-2 whitespace-pre-line rounded-[4px] border-2 border-encre bg-bulle p-5 text-[15px] leading-6">{c.rules}</div>}
+             </div>
+@@ -63,7 +64,7 @@ function PageConcours() {
+         <div className="flex flex-col gap-6">
+           {c.prizes.length > 0 && (
+             <Card>
+-              <h2 className="flex items-center gap-2 font-display text-[22px] leading-[28px]"><Trophy size={22} strokeWidth={2} aria-hidden />Les lots</h2>
++              <h2 className="flex items-center gap-2 font-display text-[22px] leading-[28px]"><Trophy size={22} strokeWidth={2} aria-hidden />{tr("Les lots", "Prizes")}</h2>
+               <ul className="mt-3 flex flex-col gap-2">
+                 {c.prizes.map((p) => <li key={p.rank} className="flex justify-between gap-3"><b className="whitespace-nowrap">{rangLabel(p.rank)}</b><span className="text-right">{p.label}</span></li>)}
+               </ul>
+@@ -75,14 +76,14 @@ function PageConcours() {
+ 
+       <section className="mt-14" aria-labelledby="participants">
+         <h2 id="participants" className="mb-2 font-display text-[28px] leading-[34px]">
+-          {c.phase === "termine" ? "Résultats" : "Les histoires en lice"}
++          {c.phase === "termine" ? tr("Résultats", "Results") : tr("Les histoires en lice", "Stories in the running")}
+         </h2>
+         <p className="mb-6 text-encre-douce">
+-          {c.phase === "termine" ? "Classement final, jury et « j'aime » compris."
+-            : c.phase === "deliberation" ? "Le concours est clos : le jury délibère. Résultats bientôt."
+-            : "Lisez-les et aimez vos préférées : vos « j'aime » comptent pour 40 % du classement."}
++          {c.phase === "termine" ? tr("Classement final, jury et « j'aime » compris.", "Final ranking, jury and likes included.")
++            : c.phase === "deliberation" ? tr("Le concours est clos : le jury délibère. Résultats bientôt.", "The contest is closed: the jury is deliberating. Results soon.")
++            : tr("Lisez-les et aimez vos préférées : vos « j'aime » comptent pour 40 % du classement.", "Read them and like your favourites: your likes count for 40% of the ranking.")}
+         </p>
+-        {c.entries_list.length === 0 ? <p className="text-encre-douce">Aucune histoire inscrite pour l'instant.</p> : (
++        {c.entries_list.length === 0 ? <p className="text-encre-douce">{tr("Aucune histoire inscrite pour l'instant.", "No stories entered yet.")}</p> : (
+           <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+             {c.entries_list.map((e) => <li key={e.entry_id}><Participant e={e} fini={c.phase === "termine"} /></li>)}
+           </ul>
+@@ -106,12 +107,12 @@ function Participant({ e, fini }: { e: Participation; fini: boolean }) {
+     <div className="flex h-full flex-col gap-2">
+       {fini && e.rank && (
+         <p className={cn("rounded-[4px] border-2 border-encre px-3 py-1 text-center font-bold", e.prize ? "bg-soleil" : "bg-bulle")}>
+-          {e.prize ? rangLabel(e.rank) : `${e.rank}e`} · <span className="tabular">{e.score?.toFixed(1)}</span>/20
++          {e.prize ? rangLabel(e.rank) : tr(`${e.rank}e`, `#${e.rank}`)} · <span className="tabular">{e.score?.toFixed(1)}</span>/20
+         </p>
+       )}
+       <div className="flex-1"><CarteHistoire c={e} /></div>
+       <p className="flex items-center gap-1 text-[14px] text-encre-douce">
+-        <Heart size={14} strokeWidth={2.5} aria-hidden /><b className="tabular text-encre">{e.contest_likes}</b> pendant le concours
++        <Heart size={14} strokeWidth={2.5} aria-hidden /><b className="tabular text-encre">{e.contest_likes}</b>{tr(" pendant le concours", " during the contest")}
+         {fini && e.jury_score != null && <> · jury <b className="tabular text-encre">{e.jury_score}</b>/20</>}
+       </p>
+     </div>
+@@ -131,36 +132,36 @@ function Participer({ c }: { c: ConcoursDetail }) {
+ 
+   if (c.phase !== "en_cours") {
+     if (!c.mine?.length) return null;
+-    return <Card><p className="font-bold">Votre participation est enregistrée.</p>
+-      {c.phase === "termine" && <p className="mt-1 text-encre-douce">Les résultats sont en bas de la page.</p>}</Card>;
++    return <Card><p className="font-bold">{tr("Votre participation est enregistrée.", "Your entry is registered.")}</p>
++      {c.phase === "termine" && <p className="mt-1 text-encre-douce">{tr("Les résultats sont en bas de la page.", "Results are at the bottom of the page.")}</p>}</Card>;
+   }
+   if (!token) {
+     return (
+       <Card>
+-        <h2 className="font-display text-[22px] leading-[28px]">Participer</h2>
+-        <p className="mt-2 text-encre-douce">Créez un compte gratuit, faites votre chapitre, puis inscrivez-le ici.</p>
+-        <Link to="/inscription" className={cn(btnClass("primary"), "mt-4")}>Créer mon compte</Link>
++        <h2 className="font-display text-[22px] leading-[28px]">{tr("Participer", "Enter")}</h2>
++        <p className="mt-2 text-encre-douce">{tr("Créez un compte gratuit, faites votre chapitre, puis inscrivez-le ici.", "Create a free account, make your chapter, then enter it here.")}</p>
++        <Link to="/inscription" className={cn(btnClass("primary"), "mt-4")}>{tr("Créer mon compte", "Create my account")}</Link>
+       </Card>
+     );
+   }
+   const restantes = c.max_entries - (c.mine?.length ?? 0);
+   return (
+     <Card>
+-      <h2 className="font-display text-[22px] leading-[28px]">Participer</h2>
++      <h2 className="font-display text-[22px] leading-[28px]">{tr("Participer", "Enter")}</h2>
+       {c.mine && c.mine.length > 0 && (
+         <ul className="mt-3 flex flex-col gap-2">
+           {c.mine.map((m) => {
+             const carte = c.entries_list.find((e) => e.entry_id === m.entry_id);
+             return (
+               <li key={m.entry_id} className="rounded-[4px] border-2 border-encre bg-papier p-3 text-[14px]">
+-                <b>{carte ? titreHistoire(carte) : "Votre histoire"}</b>
++                <b>{carte ? titreHistoire(carte) : tr("Votre histoire", "Your story")}</b>
+                 <span className="block text-encre-douce">
+-                  {m.disqualified ? `Disqualifiée : ${m.disqualified}`
+-                    : m.publication_status === "published" ? "Inscrite et visible."
+-                    : "Inscrite. Elle apparaîtra ici dès que l'équipe l'aura publiée dans la galerie."}
++                  {m.disqualified ? tr(`Disqualifiée : ${m.disqualified}`, `Disqualified: ${m.disqualified}`)
++                    : m.publication_status === "published" ? tr("Inscrite et visible.", "Entered and visible.")
++                    : tr("Inscrite. Elle apparaîtra ici dès que l'équipe l'aura publiée dans la galerie.", "Entered. It will appear here once the team has published it in the gallery.")}
+                 </span>
+                 <button className="mt-1 min-h-11 font-bold text-alerte underline" disabled={retirer.isPending}
+-                  onClick={() => { if (confirm("Retirer cette histoire du concours ?")) retirer.mutate(m.entry_id); }}>Retirer du concours</button>
++                  onClick={() => { if (confirm(tr("Retirer cette histoire du concours ?", "Withdraw this story from the contest?"))) retirer.mutate(m.entry_id); }}>{tr("Retirer du concours", "Withdraw from the contest")}</button>
+               </li>
+             );
+           })}
+@@ -169,19 +170,19 @@ function Participer({ c }: { c: ConcoursDetail }) {
+       {restantes > 0 && (
+         <>
+           <p className="mt-3 text-[15px] leading-6 text-encre-douce">
+-            1. Créez un chapitre{c.style ? ` en style ${styleParId(c.style)?.nom ?? c.style}` : ""} sur le thème.<br />
+-            2. Sur la page de l'épisode, proposez-le à la galerie « À lire ».<br />
+-            3. Revenez ici pour l'inscrire.
++            {tr("1. Créez un chapitre", "1. Create a chapter")}{c.style ? tr(` en style ${styleParId(c.style)?.nom ?? c.style}`, ` in ${styleParId(c.style)?.nom ?? c.style} style`) : ""}{tr(" sur le thème.", " on the theme.")}<br />
++            {tr("2. Sur la page de l'épisode, proposez-le à la galerie « À lire ».", "2. On the episode page, submit it to the “Read” gallery.")}<br />
++            {tr("3. Revenez ici pour l'inscrire.", "3. Come back here to enter it.")}
+           </p>
+           {(c.eligible ?? []).length === 0 ? (
+-            <Link to="/" className={cn(btnClass("primary"), "mt-4")}>Créer mon chapitre</Link>
++            <Link to="/" className={cn(btnClass("primary"), "mt-4")}>{tr("Créer mon chapitre", "Create my chapter")}</Link>
+           ) : (
+             <ul className="mt-4 flex flex-col gap-2">
+               {c.eligible!.map((p) => (
+                 <li key={p.publication_id} className="rounded-[4px] border-2 border-encre p-3">
+                   <p className="font-bold">{p.title}</p>
+                   {p.ok ? (
+-                    <Button variant="primary" className="mt-2" disabled={inscrire.isPending} onClick={() => inscrire.mutate(p.publication_id)}>Inscrire cette histoire</Button>
++                    <Button variant="primary" className="mt-2" disabled={inscrire.isPending} onClick={() => inscrire.mutate(p.publication_id)}>{tr("Inscrire cette histoire", "Enter this story")}</Button>
+                   ) : <p className="mt-1 text-[14px] text-encre-douce">{p.why}</p>}
+                 </li>
+               ))}
+diff --git a/frontend/src/routes/concours.index.tsx b/frontend/src/routes/concours.index.tsx
+index 1d6ddad..8f46f0c 100644
+--- a/frontend/src/routes/concours.index.tsx
++++ b/frontend/src/routes/concours.index.tsx
+@@ -5,12 +5,13 @@ import { api } from "@/lib/api";
+ import { dateLongue, PHASE_TON, reste, type Concours } from "@/lib/concours";
+ import { styleParId } from "@/content/styles";
+ import { Container, ErrorNote, PageTitle, Pill } from "@/components/ink";
++import { tr } from "@/lib/i18n";
+ 
+ export const Route = createFileRoute("/concours/")({
+   head: () => ({
+     meta: [
+-      { title: "Concours — MangaStudio" },
+-      { name: "description", content: "Participez aux concours de manga de MangaStudio : un thème, un chapitre, un jury et vos lecteurs." },
++      { title: tr("Concours — MangaStudio", "Contests — MangaStudio") },
++      { name: "description", content: tr("Participez aux concours de manga de MangaStudio : un thème, un chapitre, un jury et vos lecteurs.", "Enter MangaStudio's manga contests: a theme, a chapter, a jury and your readers.") },
+     ],
+   }),
+   component: ListeConcours,
+@@ -20,14 +21,14 @@ function ListeConcours() {
+   const { data, error, isLoading } = useQuery({ queryKey: ["concours"], queryFn: () => api<{ items: Concours[] }>("/contests") });
+   return (
+     <Container className="max-w-[1000px]">
+-      <PageTitle sub="Un thème, un chapitre, un jury et vos lecteurs. Des crédits et des mois de plan Studio à gagner.">Concours</PageTitle>
++      <PageTitle sub={tr("Un thème, un chapitre, un jury et vos lecteurs. Des crédits et des mois de plan Studio à gagner.", "A theme, a chapter, a jury and your readers. Credits and months of Studio plan to win.")}>{tr("Concours", "Contests")}</PageTitle>
+       <ErrorNote error={error} />
+-      {isLoading && <p className="text-encre-douce">Chargement…</p>}
++      {isLoading && <p className="text-encre-douce">{tr("Chargement…", "Loading…")}</p>}
+       {data && data.items.length === 0 && (
+         <div className="rounded-[8px] border-2 border-dashed border-encre bg-bulle p-8 text-center">
+           <Trophy size={36} strokeWidth={2} aria-hidden className="mx-auto" />
+-          <p className="mt-3 font-display text-[22px] leading-[28px]">Le premier concours arrive bientôt.</p>
+-          <p className="mt-2 text-encre-douce">En attendant, entraînez-vous : créez un chapitre et publiez-le dans la galerie « À lire ».</p>
++          <p className="mt-3 font-display text-[22px] leading-[28px]">{tr("Le premier concours arrive bientôt.", "The first contest is coming soon.")}</p>
++          <p className="mt-2 text-encre-douce">{tr("En attendant, entraînez-vous : créez un chapitre et publiez-le dans la galerie « À lire ».", "Meanwhile, practise: create a chapter and publish it in the “Read” gallery.")}</p>
+         </div>
+       )}
+       <ul className="grid gap-6">
+@@ -44,16 +45,16 @@ export function CarteConcours({ c }: { c: Concours }) {
+       className="block rounded-[8px] border-2 border-encre bg-bulle p-6 shadow-ink transition-transform hover:-translate-y-1 focus-visible:-translate-y-1">
+       <div className="flex flex-wrap items-center gap-2">
+         <Pill tone={PHASE_TON[c.phase]}>{c.phase_label}</Pill>
+-        {style && <Pill>Style {style}</Pill>}
+-        <span className="text-[14px] text-encre-douce">du {dateLongue(c.starts_at)} au {dateLongue(c.ends_at)}</span>
++        {style && <Pill>{tr("Style", "Style")} {style}</Pill>}
++        <span className="text-[14px] text-encre-douce">{tr(`du ${dateLongue(c.starts_at)} au ${dateLongue(c.ends_at)}`, `${dateLongue(c.starts_at)} to ${dateLongue(c.ends_at)}`)}</span>
+       </div>
+       <h2 className="mt-3 font-display text-[28px] leading-[34px]">{c.title}</h2>
+       {c.theme && <p className="mt-1 text-[17px] leading-7">{c.theme}</p>}
+       <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 text-[15px]">
+-        {c.prizes[0] && <span><Trophy size={16} strokeWidth={2.5} aria-hidden className="mr-1 inline" /><b>1er prix :</b> {c.prizes[0].label}</span>}
+-        <span><b className="tabular">{c.entries}</b> participant{c.entries > 1 ? "s" : ""}</span>
+-        {c.phase === "en_cours" && <span>Clôture dans <b>{reste(c.ends_at)}</b></span>}
+-        {c.phase === "a_venir" && <span>Ouverture dans <b>{reste(c.starts_at)}</b></span>}
++        {c.prizes[0] && <span><Trophy size={16} strokeWidth={2.5} aria-hidden className="mr-1 inline" /><b>{tr("1er prix :", "1st prize:")}</b> {c.prizes[0].label}</span>}
++        <span><b className="tabular">{c.entries}</b> {c.entries > 1 ? tr("participants", "entries") : tr("participant", "entry")}</span>
++        {c.phase === "en_cours" && <span>{tr("Clôture dans ", "Closes in ")}<b>{reste(c.ends_at)}</b></span>}
++        {c.phase === "a_venir" && <span>{tr("Ouverture dans ", "Opens in ")}<b>{reste(c.starts_at)}</b></span>}
+       </div>
+     </Link>
+   );
+diff --git a/frontend/src/routes/connexion.tsx b/frontend/src/routes/connexion.tsx
+index 4fee802..4564b11 100644
+--- a/frontend/src/routes/connexion.tsx
++++ b/frontend/src/routes/connexion.tsx
+@@ -1,7 +1,8 @@
+ import { createFileRoute } from "@tanstack/react-router";
+ import { AuthForm } from "@/components/AuthForm";
++import { tr } from "@/lib/i18n";
+ 
+ export const Route = createFileRoute("/connexion")({
+-  head: () => ({ meta: [{ title: "Connexion — MangaStudio" }, { name: "description", content: "Connectez-vous à votre studio de manga." }] }),
++  head: () => ({ meta: [{ title: tr("Connexion — MangaStudio", "Sign in — MangaStudio") }, { name: "description", content: tr("Connectez-vous à votre studio de manga.", "Sign in to your manga studio.") }] }),
+   component: () => <AuthForm mode="login" />,
+ });
+diff --git a/frontend/src/routes/contact.tsx b/frontend/src/routes/contact.tsx
+index 01218dd..8c60dec 100644
+--- a/frontend/src/routes/contact.tsx
++++ b/frontend/src/routes/contact.tsx
+@@ -4,9 +4,10 @@ import type { ReactNode } from "react";
+ import { CONTACT } from "@/content/contact";
+ import { telHref, whatsappHref } from "@/lib/contact";
+ import { Card, Container, PageTitle } from "@/components/ink";
++import { tr } from "@/lib/i18n";
+ 
+ export const Route = createFileRoute("/contact")({
+-  head: () => ({ meta: [{ title: "Nous contacter — MangaStudio" }, { name: "description", content: "Écrire ou appeler l'équipe MangaStudio." }] }),
++  head: () => ({ meta: [{ title: tr("Nous contacter — MangaStudio", "Contact us — MangaStudio") }, { name: "description", content: tr("Écrire ou appeler l'équipe MangaStudio.", "Write to or call the MangaStudio team.") }] }),
+   component: ContactPage,
+ });
+ 
+@@ -24,11 +25,11 @@ function Ligne({ icone, titre, children }: { icone: ReactNode; titre: string; ch
+ 
+ function Numero({ n, operateur }: { n: string; operateur: string }) {
+   return (
+-    <Ligne icone={<Phone size={22} strokeWidth={2} />} titre={`Téléphone ${operateur}`}>
++    <Ligne icone={<Phone size={22} strokeWidth={2} />} titre={tr(`Téléphone ${operateur}`, `${operateur} phone`)}>
+       <a href={telHref(n)} className="tabular underline">{n}</a>
+       {CONTACT.whatsapp && (
+         <a href={whatsappHref(n)} target="_blank" rel="noreferrer" className="mt-2 flex items-center gap-2 text-[15px] font-medium text-succes underline">
+-          <MessageCircle size={18} strokeWidth={2} aria-hidden />Écrire sur WhatsApp
++          <MessageCircle size={18} strokeWidth={2} aria-hidden />{tr("Écrire sur WhatsApp", "Message on WhatsApp")}
+         </a>
+       )}
+     </Ligne>
+@@ -39,25 +40,25 @@ function ContactPage() {
+   const rien = !CONTACT.email && !CONTACT.orange && !CONTACT.mtn;
+   return (
+     <Container className="max-w-[860px]">
+-      <PageTitle sub={<>Une question sur un épisode, un paiement ou votre compte ? Consultez d'abord les <Link to="/faq" className="font-bold text-indigo underline">questions fréquentes</Link>, sinon contactez-nous.</>}>
+-        Nous contacter
++      <PageTitle sub={<>{tr("Une question sur un épisode, un paiement ou votre compte ? Consultez d'abord les ", "A question about an episode, a payment or your account? First check the ")}<Link to="/faq" className="font-bold text-indigo underline">{tr("questions fréquentes", "FAQ")}</Link>{tr(", sinon contactez-nous.", ", otherwise contact us.")}</>}>
++        {tr("Nous contacter", "Contact us")}
+       </PageTitle>
+       {rien ? (
+-        <p className="text-encre-douce">Nos coordonnées seront bientôt disponibles ici.</p>
++        <p className="text-encre-douce">{tr("Nos coordonnées seront bientôt disponibles ici.", "Our contact details will be available here soon.")}</p>
+       ) : (
+         <div className="grid gap-4 sm:grid-cols-2">
+           {CONTACT.email && (
+-            <Ligne icone={<Mail size={22} strokeWidth={2} />} titre="E-mail">
++            <Ligne icone={<Mail size={22} strokeWidth={2} />} titre={tr("E-mail", "Email")}>
+               <a href={`mailto:${CONTACT.email}`} className="break-all underline">{CONTACT.email}</a>
+             </Ligne>
+           )}
+           {CONTACT.orange && <Numero n={CONTACT.orange} operateur="Orange" />}
+           {CONTACT.mtn && <Numero n={CONTACT.mtn} operateur="MTN" />}
+-          {CONTACT.horaires && <Ligne icone={<Clock size={22} strokeWidth={2} />} titre="Horaires"><span className="text-[16px] font-medium">{CONTACT.horaires}</span></Ligne>}
++          {CONTACT.horaires && <Ligne icone={<Clock size={22} strokeWidth={2} />} titre={tr("Horaires", "Opening hours")}><span className="text-[16px] font-medium">{tr(CONTACT.horaires, CONTACT.horairesEn || CONTACT.horaires)}</span></Ligne>}
+         </div>
+       )}
+       <p className="mt-8 text-[14px] leading-5 text-encre-douce">
+-        Pour un paiement, indiquez la date, le montant et le numéro utilisé : nous le retrouverons plus vite.
++        {tr("Pour un paiement, indiquez la date, le montant et le numéro utilisé : nous le retrouverons plus vite.", "For a payment, give the date, the amount and the number used: we'll find it faster.")}
+       </p>
+     </Container>
+   );
+diff --git a/frontend/src/routes/episodes.$id.tsx b/frontend/src/routes/episodes.$id.tsx
+index 2dbd38c..45d3ae0 100644
+--- a/frontend/src/routes/episodes.$id.tsx
++++ b/frontend/src/routes/episodes.$id.tsx
+@@ -2,7 +2,8 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+ import { useEffect, useRef, useState } from "react";
+ import { Check, ChevronLeft, ChevronRight, Loader, Maximize2, RotateCcw, Trash2, X } from "lucide-react";
+-import { api, ACTIVE, STATUS_LABEL, type Episode } from "@/lib/api";
++import { api, ACTIVE, statusLabel, type Episode } from "@/lib/api";
++import { intlLocale, tr } from "@/lib/i18n";
+ import { useMe } from "@/lib/session";
+ import { btnClass, Button, Card, Container, ErrorNote, Field, PageTitle, Pill, RequireAuth, Textarea } from "@/components/ink";
+ import { cn } from "@/lib/utils";
+@@ -13,10 +14,10 @@ import { PublierChapitre } from "@/components/PublierChapitre";
+ export const Route = createFileRoute("/episodes/$id")({
+   head: () => ({
+     meta: [
+-      { title: "Lecture de l'épisode — MangaStudio" },
+-      { name: "description", content: "Suivez le dessin de votre épisode page après page et lisez-le." },
+-      { property: "og:title", content: "Lecture de l'épisode — MangaStudio" },
+-      { property: "og:description", content: "Suivez le dessin de votre épisode page après page." },
++      { title: tr("Lecture de l'épisode — MangaStudio", "Episode — MangaStudio") },
++      { name: "description", content: tr("Suivez le dessin de votre épisode page après page et lisez-le.", "Follow your episode being drawn page by page, and read it.") },
++      { property: "og:title", content: tr("Lecture de l'épisode — MangaStudio", "Episode — MangaStudio") },
++      { property: "og:description", content: tr("Suivez le dessin de votre épisode page après page.", "Follow your episode being drawn page by page.") },
+       { property: "og:type", content: "website" },
+       { name: "twitter:card", content: "summary" },
+     ],
+@@ -24,13 +25,15 @@ export const Route = createFileRoute("/episodes/$id")({
+   component: () => <RequireAuth><EpisodePage /></RequireAuth>,
+ });
+ 
+-const STAGE_LABEL: Record<string, string> = {
+-  design: "Design des personnages", script: "Scénario", moderation: "Modération", sheet: "Fiches modèles",
+-  page: "Pages", check: "Relecture", cover: "Couverture", redraw: "Redessins demandés",
+-};
+-const STAGE_ORDER = Object.keys(STAGE_LABEL);   // ordre du pipeline, pas ordre alphabétique
+-const STEPS = [["designing", "Design des personnages"], ["writing", "Écriture du scénario"], ["moderating", "Vérification du contenu"], ["drawing", "Dessin des pages"]] as const;
+-const fmt = (n: number | undefined) => (n ?? 0).toLocaleString("fr-FR");
++const stageLabel = (s: string) => ({
++  design: tr("Design des personnages", "Character design"), script: tr("Scénario", "Script"), moderation: tr("Modération", "Moderation"),
++  sheet: tr("Fiches modèles", "Model sheets"), page: tr("Pages", "Pages"), check: tr("Relecture", "Review"),
++  cover: tr("Couverture", "Cover"), redraw: tr("Redessins demandés", "Requested redraws"),
++} as Record<string, string>)[s] ?? s;
++const STAGE_ORDER = ["design", "script", "moderation", "sheet", "page", "check", "cover", "redraw"];   // ordre du pipeline
++const steps = () => [["designing", tr("Design des personnages", "Character design")], ["writing", tr("Écriture du scénario", "Writing the script")],
++  ["moderating", tr("Vérification du contenu", "Checking content")], ["drawing", tr("Dessin des pages", "Drawing pages")]] as const;
++const fmt = (n: number | undefined) => (n ?? 0).toLocaleString(intlLocale());
+ 
+ function EpisodePage() {
+   const { id } = Route.useParams();
+@@ -76,8 +79,9 @@ function EpisodePage() {
+     onSuccess: () => qc.invalidateQueries({ queryKey: ["episode", id] }),
+   });
+ 
+-  if (isLoading) return <Container><p className="text-encre-douce">Chargement de l'épisode…</p></Container>;
+-  if (error || !ep) return <Container><ErrorNote error={error ?? new Error("Épisode introuvable.")} /></Container>;
++  if (isLoading) return <Container><p className="text-encre-douce">{tr("Chargement de l'épisode…", "Loading the episode…")}</p></Container>;
++  if (error || !ep) return <Container><ErrorNote error={error ?? new Error(tr("Épisode introuvable.", "Episode not found."))} /></Container>;
++  const STEPS = steps();
+ 
+   const pages = [...(ep.pages ?? [])].sort((a, b) => a.number - b.number);
+   const total = ep.page_count || pages.length;
+@@ -89,23 +93,23 @@ function EpisodePage() {
+ 
+   return (
+     <Container>
+-      {ep.series_id && <Link to="/series/$id" params={{ id: String(ep.series_id) }} className="mb-4 inline-flex min-h-11 items-center font-bold text-indigo underline">Retour à la série</Link>}
+-      <PageTitle sub={<span className="inline-flex flex-wrap items-center gap-2">Statut : <Pill tone={finished ? "succes" : active ? "indigo" : "alerte"}>{STATUS_LABEL[ep.status] ?? ep.status}</Pill></span>}>
+-        {ep.title || `Épisode ${ep.number}`}
++      {ep.series_id && <Link to="/series/$id" params={{ id: String(ep.series_id) }} className="mb-4 inline-flex min-h-11 items-center font-bold text-indigo underline">{tr("Retour à la série", "Back to the series")}</Link>}
++      <PageTitle sub={<span className="inline-flex flex-wrap items-center gap-2">{tr("Statut : ", "Status: ")}<Pill tone={finished ? "succes" : active ? "indigo" : "alerte"}>{statusLabel(ep.status)}</Pill></span>}>
++        {ep.title || tr(`Épisode ${ep.number}`, `Episode ${ep.number}`)}
+       </PageTitle>
+ 
+-      <ol className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Étapes">
++      <ol className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label={tr("Étapes", "Steps")}>
+         {STEPS.map(([key, label], i) => {
+           const done = finished || (active && ep.status !== "queued" && i < stepIdx);
+           const now = i === stepIdx;
+-          const state = done ? "Terminé" : now ? "En cours" : "À venir";
++          const state = done ? tr("Terminé", "Done") : now ? tr("En cours", "In progress") : tr("À venir", "Coming up");
+           return (
+             <li key={key} className={cn("flex items-center gap-3 rounded-[8px] border-2 border-encre bg-bulle p-3", now ? "shadow-ink-lg" : "shadow-ink")}>
+               <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-full border-2 border-encre", done && "bg-succes text-bulle")}>
+                 {done ? <Check size={18} strokeWidth={2} aria-hidden /> : now ? <Loader size={18} strokeWidth={2} className="animate-spin" aria-hidden /> : <span className="tabular text-[13px] font-bold">{i + 1}</span>}
+               </span>
+               <span className="leading-5">
+-                <span className="block font-bold">{label}{key === "drawing" && <> <span className="tabular">{drawn}</span> sur <span className="tabular">{total}</span></>}</span>
++                <span className="block font-bold">{label}{key === "drawing" && <> <span className="tabular">{drawn}</span> {tr("sur", "of")} <span className="tabular">{total}</span></>}</span>
+                 <span className={cn("text-[13px] font-bold", done ? "text-succes" : "text-encre-douce")}>{state}</span>
+               </span>
+             </li>
+@@ -114,63 +118,63 @@ function EpisodePage() {
+       </ol>
+ 
+       {ep.status === "blocked" && (
+-        <Card className="mb-8 border-alerte"><p className="font-display text-[24px] leading-[30px] text-alerte">Épisode arrêté</p>
++        <Card className="mb-8 border-alerte"><p className="font-display text-[24px] leading-[30px] text-alerte">{tr("Épisode arrêté", "Episode stopped")}</p>
+           {ep.error && <p className="mt-2">{ep.error}</p>}
+-          <p className="mt-2 font-bold">Les crédits non utilisés vous ont été rendus.</p>
++          <p className="mt-2 font-bold">{tr("Les crédits non utilisés vous ont été rendus.", "Unused credits have been refunded.")}</p>
+           {ep.series_id && (
+-            <p className="mt-4"><Link to="/series/$id" params={{ id: String(ep.series_id) }} className={btnClass("primary")}>Modifier mes personnages et relancer</Link></p>
++            <p className="mt-4"><Link to="/series/$id" params={{ id: String(ep.series_id) }} className={btnClass("primary")}>{tr("Modifier mes personnages et relancer", "Edit my characters and start again")}</Link></p>
+           )}
+         </Card>
+       )}
+       {ep.status === "failed" && (
+-        <Card className="mb-8"><p className="font-bold text-alerte">L'épisode s'est interrompu.</p>{ep.error && <p className="mt-2">{ep.error}</p>}
++        <Card className="mb-8"><p className="font-bold text-alerte">{tr("L'épisode s'est interrompu.", "The episode was interrupted.")}</p>{ep.error && <p className="mt-2">{ep.error}</p>}
+           <p className="mt-2 text-[14px] leading-5 text-encre-douce">
+-            Reprendre redessine seulement ce qui manque. Si l'interruption revient, abandonnez l'épisode : les crédits non utilisés vous sont rendus
+-            et vous pourrez en lancer un nouveau (après avoir modifié vos personnages si besoin).
++            {tr("Reprendre redessine seulement ce qui manque. Si l'interruption revient, abandonnez l'épisode : les crédits non utilisés vous sont rendus et vous pourrez en lancer un nouveau (après avoir modifié vos personnages si besoin).",
++              "Resuming only redraws what's missing. If the interruption happens again, abandon the episode: unused credits are refunded and you can start a new one (after editing your characters if needed).")}
+           </p>
+           <ErrorNote error={resume.error ?? abandon.error} />
+           <div className="mt-4 flex flex-wrap gap-3">
+-            <Button variant="primary" disabled={resume.isPending || abandon.isPending} onClick={() => resume.mutate()}><RotateCcw size={20} strokeWidth={2} aria-hidden />Reprendre</Button>
+-            <Button disabled={resume.isPending || abandon.isPending} onClick={() => { if (confirm("Abandonner cet épisode ? Les crédits non utilisés vous seront rendus.")) abandon.mutate(); }}>Abandonner l'épisode</Button>
++            <Button variant="primary" disabled={resume.isPending || abandon.isPending} onClick={() => resume.mutate()}><RotateCcw size={20} strokeWidth={2} aria-hidden />{tr("Reprendre", "Resume")}</Button>
++            <Button disabled={resume.isPending || abandon.isPending} onClick={() => { if (confirm(tr("Abandonner cet épisode ? Les crédits non utilisés vous seront rendus.", "Abandon this episode? Unused credits will be refunded."))) abandon.mutate(); }}>{tr("Abandonner l'épisode", "Abandon the episode")}</Button>
+           </div>
+         </Card>
+       )}
+       {ep.status === "canceled" && (
+-        <Card className="mb-8"><p className="font-bold">Épisode abandonné.</p>
++        <Card className="mb-8"><p className="font-bold">{tr("Épisode abandonné.", "Episode abandoned.")}</p>
+           <p className="mt-2 text-encre-douce">
+-            Les crédits non utilisés vous ont été rendus. Pour repartir de zéro, supprimez-le : ses pages et son scénario disparaissent,
+-            il n'influence plus la suite de l'histoire, et le prochain épisode reprendra son numéro.
++            {tr("Les crédits non utilisés vous ont été rendus. Pour repartir de zéro, supprimez-le : ses pages et son scénario disparaissent, il n'influence plus la suite de l'histoire, et le prochain épisode reprendra son numéro.",
++              "Unused credits have been refunded. To start from scratch, delete it: its pages and script disappear, it no longer affects the rest of the story, and the next episode takes its number.")}
+           </p>
+           <ErrorNote error={effacer.error} />
+           <div className="mt-4 flex flex-wrap gap-3">
+             <Button variant="primary" disabled={effacer.isPending}
+-              onClick={() => { if (confirm("Supprimer définitivement cet épisode ? Ses pages et son scénario seront effacés. Cette action est irréversible.")) effacer.mutate(); }}>
+-              <Trash2 size={20} strokeWidth={2} aria-hidden />{effacer.isPending ? "Suppression…" : "Supprimer définitivement"}
++              onClick={() => { if (confirm(tr("Supprimer définitivement cet épisode ? Ses pages et son scénario seront effacés. Cette action est irréversible.", "Delete this episode permanently? Its pages and script will be erased. This can't be undone."))) effacer.mutate(); }}>
++              <Trash2 size={20} strokeWidth={2} aria-hidden />{effacer.isPending ? tr("Suppression…", "Deleting…") : tr("Supprimer définitivement", "Delete permanently")}
+             </Button>
+-            {ep.series_id && <Link to="/series/$id" params={{ id: String(ep.series_id) }} className={btnClass()}>Retour à la série</Link>}
++            {ep.series_id && <Link to="/series/$id" params={{ id: String(ep.series_id) }} className={btnClass()}>{tr("Retour à la série", "Back to the series")}</Link>}
+           </div>
+         </Card>
+       )}
+ 
+       <div className="grid gap-8 lg:grid-cols-[1fr_280px]">
+-        <section aria-label="Page sélectionnée">
++        <section aria-label={tr("Page sélectionnée", "Selected page")}>
+           <PageView url={page?.url} number={page?.number ?? 1} failed={page?.status === "failed"} stopped={!active} big />
+           <div className="mt-4 flex flex-wrap items-center gap-3">
+-            <Button aria-label="Page précédente" disabled={current <= 0} onClick={() => setCurrent((c) => c - 1)}><ChevronLeft size={20} strokeWidth={2} aria-hidden /></Button>
++            <Button aria-label={tr("Page précédente", "Previous page")} disabled={current <= 0} onClick={() => setCurrent((c) => c - 1)}><ChevronLeft size={20} strokeWidth={2} aria-hidden /></Button>
+             <span className="tabular font-bold">Page {page?.number ?? 1} / {total}</span>
+-            <Button aria-label="Page suivante" disabled={current >= pages.length - 1} onClick={() => setCurrent((c) => c + 1)}><ChevronRight size={20} strokeWidth={2} aria-hidden /></Button>
+-            <Button className="ml-auto" disabled={drawn === 0} onClick={() => setReader(true)}><Maximize2 size={20} strokeWidth={2} aria-hidden />Plein écran</Button>
++            <Button aria-label={tr("Page suivante", "Next page")} disabled={current >= pages.length - 1} onClick={() => setCurrent((c) => c + 1)}><ChevronRight size={20} strokeWidth={2} aria-hidden /></Button>
++            <Button className="ml-auto" disabled={drawn === 0} onClick={() => setReader(true)}><Maximize2 size={20} strokeWidth={2} aria-hidden />{tr("Plein écran", "Full screen")}</Button>
+           </div>
+-          {redrawing && <p role="status" className="mt-4 font-bold text-indigo">Redessin en cours…</p>}
++          {redrawing && <p role="status" className="mt-4 font-bold text-indigo">{tr("Redessin en cours…", "Redrawing…")}</p>}
+           {me?.plan.redraw && page && (page.url || page.status === "failed") && !active && ep.status !== "blocked" && !redrawing && (
+             <Redraw key={page.id} pageId={String(page.id)} onSent={() => setRedrawing({ pageId: String(page.id), attempts: page.attempts ?? 0, at: Date.now() })} />
+           )}
+         </section>
+-        <aside aria-label="Toutes les pages">
++        <aside aria-label={tr("Toutes les pages", "All pages")}>
+           <ul className="grid grid-cols-3 gap-3 lg:grid-cols-2">
+             {pages.map((p, i) => (
+               <li key={p.id}>
+-                <button onClick={() => setCurrent(i)} aria-current={i === current} aria-label={`Page ${p.number}${p.url ? "" : p.status === "failed" ? ", à refaire" : active ? ", en cours" : ", non dessinée"}`} className={cn("block w-full", i === current && "outline-3 outline-offset-2 outline-vermillon")}>
++                <button onClick={() => setCurrent(i)} aria-current={i === current} aria-label={`Page ${p.number}${p.url ? "" : p.status === "failed" ? tr(", à refaire", ", to redo") : active ? tr(", en cours", ", in progress") : tr(", non dessinée", ", not drawn")}`} className={cn("block w-full", i === current && "outline-3 outline-offset-2 outline-vermillon")}>
+                   <PageView url={p.url} number={p.number} failed={p.status === "failed"} stopped={!active} />
+                 </button>
+               </li>
+@@ -189,7 +193,7 @@ function EpisodePage() {
+ }
+ 
+ function PageView({ url, number, big, failed, stopped }: { url?: string | null | undefined; number: number; big?: boolean; failed?: boolean; stopped?: boolean }) {
+-  const state = failed ? "À refaire" : stopped ? "Non dessinée" : "En cours";
++  const state = failed ? tr("À refaire", "To redo") : stopped ? tr("Non dessinée", "Not drawn") : tr("En cours", "In progress");
+   return url ? (
+     <img src={url} alt={`Page ${number}`} className={cn("aspect-[2/3] w-full border-2 border-encre bg-blanc object-contain", big && "mx-auto max-w-[560px]")} />
+   ) : (
+@@ -208,11 +212,11 @@ function Redraw({ pageId, onSent }: { pageId: string; onSent: () => void }) {
+   return (
+     <Card className="mt-6 max-w-[560px]">
+       <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); m.mutate(); }}>
+-        <Field label="Remarque pour cette page" htmlFor="note" hint={(m.error as { code?: string } | null)?.code === "blocked_terms" ? <ErrorNote inline error={m.error} /> : undefined}>
+-          <Textarea id="note" required minLength={3} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Agrandir la case du milieu, regard plus déterminé…" />
++        <Field label={tr("Remarque pour cette page", "Note for this page")} htmlFor="note" hint={(m.error as { code?: string } | null)?.code === "blocked_terms" ? <ErrorNote inline error={m.error} /> : undefined}>
++          <Textarea id="note" required minLength={3} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} placeholder={tr("Agrandir la case du milieu, regard plus déterminé…", "Make the middle panel bigger, a more determined look…")} />
+         </Field>
+         {(m.error as { code?: string } | null)?.code !== "blocked_terms" && <ErrorNote error={m.error} />}
+-        <Button type="submit" disabled={m.isPending}>Redessiner cette page · 1 crédit</Button>
++        <Button type="submit" disabled={m.isPending}>{tr("Redessiner cette page · 1 crédit", "Redraw this page · 1 credit")}</Button>
+       </form>
+     </Card>
+   );
+@@ -221,19 +225,19 @@ function Redraw({ pageId, onSent }: { pageId: string; onSent: () => void }) {
+ function UsageCard({ u }: { u: NonNullable<Episode["usage"]> }) {
+   return (
+     <Card className="mt-12">
+-      <h2 className="font-display text-[24px] leading-[30px]">Consommation de l'épisode</h2>
++      <h2 className="font-display text-[24px] leading-[30px]">{tr("Consommation de l'épisode", "Episode usage")}</h2>
+       <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+-        {[["Tokens lus", u.input_tokens], ["Tokens écrits", u.output_tokens], ["Images", u.images], ["Crédits", u.credits]].map(([l, v]) => (
++        {[[tr("Tokens lus", "Tokens read"), u.input_tokens], [tr("Tokens écrits", "Tokens written"), u.output_tokens], [tr("Images", "Images"), u.images], [tr("Crédits", "Credits"), u.credits]].map(([l, v]) => (
+           <div key={l as string} className="rounded-[4px] border-2 border-encre p-3"><dt className="label-caps">{l}</dt><dd className="tabular mt-1 text-right text-[20px] font-bold">{fmt(v as number)}</dd></div>
+         ))}
+       </dl>
+       <div className="mt-6 overflow-x-auto">
+         <table className="w-full min-w-[520px] text-[14px] leading-5">
+-          <thead><tr className="border-b-2 border-encre text-left"><th className="label-caps py-2">Étape</th><th className="label-caps py-2 text-right">Appels</th><th className="label-caps py-2 text-right">Tokens lus</th><th className="label-caps py-2 text-right">Tokens écrits</th><th className="label-caps py-2 text-right">Images</th></tr></thead>
++          <thead><tr className="border-b-2 border-encre text-left"><th className="label-caps py-2">{tr("Étape", "Step")}</th><th className="label-caps py-2 text-right">{tr("Appels", "Calls")}</th><th className="label-caps py-2 text-right">{tr("Tokens lus", "Tokens read")}</th><th className="label-caps py-2 text-right">{tr("Tokens écrits", "Tokens written")}</th><th className="label-caps py-2 text-right">{tr("Images", "Images")}</th></tr></thead>
+           <tbody>
+             {[...u.stages].sort((a, b) => STAGE_ORDER.indexOf(a.stage) - STAGE_ORDER.indexOf(b.stage)).map((s) => (
+               <tr key={s.stage} className="border-b border-trait">
+-                <td className="py-2 font-medium">{STAGE_LABEL[s.stage] ?? s.stage}</td>
++                <td className="py-2 font-medium">{stageLabel(s.stage)}</td>
+                 <td className="tabular py-2 text-right">{fmt(s.calls)}</td><td className="tabular py-2 text-right">{fmt(s.input_tokens)}</td>
+                 <td className="tabular py-2 text-right">{fmt(s.output_tokens)}</td><td className="tabular py-2 text-right">{fmt(s.images)}</td>
+               </tr>
+@@ -257,16 +261,16 @@ function Reader({ pages, onClose }: { pages: Episode["pages"]; onClose: () => vo
+   }, [pages.length, onClose]);
+   const p = pages[i];
+   return (
+-    <div className="dark fixed inset-0 z-50" role="dialog" aria-modal aria-label="Lecteur plein écran">
++    <div className="dark fixed inset-0 z-50" role="dialog" aria-modal aria-label={tr("Lecteur plein écran", "Full-screen reader")}>
+       <div className="flex h-full flex-col bg-papier text-encre">
+         <div className="flex items-center justify-between gap-3 p-3">
+           <span className="tabular font-bold">Page {p?.number} / {pages.length}</span>
+-          <Button aria-label="Fermer le lecteur" onClick={onClose}><X size={20} strokeWidth={2} aria-hidden /></Button>
++          <Button aria-label={tr("Fermer le lecteur", "Close the reader")} onClick={onClose}><X size={20} strokeWidth={2} aria-hidden /></Button>
+         </div>
+         <div className="flex min-h-0 flex-1 items-center justify-center gap-3 px-3 pb-6">
+-          <Button aria-label="Page précédente" disabled={i === 0} onClick={() => setI(i - 1)}><ChevronLeft size={20} strokeWidth={2} aria-hidden /></Button>
++          <Button aria-label={tr("Page précédente", "Previous page")} disabled={i === 0} onClick={() => setI(i - 1)}><ChevronLeft size={20} strokeWidth={2} aria-hidden /></Button>
+           {p?.url && <img src={p.url} alt={`Page ${p.number}`} className="aspect-[2/3] h-full max-h-full min-w-0 border-2 border-encre bg-blanc object-contain" />}
+-          <Button aria-label="Page suivante" disabled={i >= pages.length - 1} onClick={() => setI(i + 1)}><ChevronRight size={20} strokeWidth={2} aria-hidden /></Button>
++          <Button aria-label={tr("Page suivante", "Next page")} disabled={i >= pages.length - 1} onClick={() => setI(i + 1)}><ChevronRight size={20} strokeWidth={2} aria-hidden /></Button>
+         </div>
+       </div>
+     </div>
+diff --git a/frontend/src/routes/faq.tsx b/frontend/src/routes/faq.tsx
+index ffe0ec3..b8df71e 100644
+--- a/frontend/src/routes/faq.tsx
++++ b/frontend/src/routes/faq.tsx
+@@ -1,25 +1,27 @@
+ import { createFileRoute, Link } from "@tanstack/react-router";
+ import { ChevronDown } from "lucide-react";
+-import { FAQ } from "@/content/faq";
++import { faq } from "@/content/faq";
++import { tr } from "@/lib/i18n";
+ import { Container, PageTitle } from "@/components/ink";
+ 
+ export const Route = createFileRoute("/faq")({
+   head: () => ({
+     meta: [
+-      { title: "Questions fréquentes — MangaStudio" },
+-      { name: "description", content: "Crédits, paiement mobile money, personnages, règles de contenu : les réponses aux questions sur MangaStudio." },
++      { title: tr("Questions fréquentes — MangaStudio", "FAQ — MangaStudio") },
++      { name: "description", content: tr("Crédits, paiement mobile money, personnages, règles de contenu : les réponses aux questions sur MangaStudio.", "Credits, mobile money payment, characters, content rules: answers to your questions about MangaStudio.") },
+     ],
+   }),
+   component: FaqPage,
+ });
+ 
+ function FaqPage() {
++  const FAQ = faq();
+   return (
+     <Container className="max-w-[860px]">
+-      <PageTitle sub={<>Vous ne trouvez pas votre réponse ? <Link to="/contact" className="font-bold text-indigo underline">Écrivez-nous</Link>.</>}>
+-        Questions fréquentes
++      <PageTitle sub={<>{tr("Vous ne trouvez pas votre réponse ? ", "Can't find your answer? ")}<Link to="/contact" className="font-bold text-indigo underline">{tr("Écrivez-nous", "Write to us")}</Link>.</>}>
++        {tr("Questions fréquentes", "Frequently asked questions")}
+       </PageTitle>
+-      <nav aria-label="Rubriques" className="mb-10 flex flex-wrap gap-2">
++      <nav aria-label={tr("Rubriques", "Topics")} className="mb-10 flex flex-wrap gap-2">
+         {FAQ.map((r, i) => (
+           <a key={r.rubrique} href={`#rubrique-${i}`} className="inline-flex min-h-10 items-center rounded-full border-2 border-encre bg-bulle px-4 text-[14px] font-bold hover:bg-soleil">
+             {r.rubrique}
+diff --git a/frontend/src/routes/gagner.tsx b/frontend/src/routes/gagner.tsx
+index 754100e..5b3c2f7 100644
+--- a/frontend/src/routes/gagner.tsx
++++ b/frontend/src/routes/gagner.tsx
+@@ -3,10 +3,11 @@ import { useQuery } from "@tanstack/react-query";
+ import { useState } from "react";
+ import { CalendarClock, Check, Copy, Gift, Users } from "lucide-react";
+ import { api } from "@/lib/api";
++import { intlLocale, tr } from "@/lib/i18n";
+ import { Button, Card, Container, ErrorNote, Onomatopee, PageTitle, Pill, RequireAuth } from "@/components/ink";
+ 
+ export const Route = createFileRoute("/gagner")({
+-  head: () => ({ meta: [{ title: "Gagner des crédits — MangaStudio" }] }),
++  head: () => ({ meta: [{ title: tr("Gagner des crédits — MangaStudio", "Earn credits — MangaStudio") }] }),
+   component: () => <RequireAuth><GagnerPage /></RequireAuth>,
+ });
+ 
+@@ -19,80 +20,86 @@ type Gagner = {
+   weekly_refill: { amount: number; next: string };
+ };
+ 
+-const ETAT = {
+-  pending: { texte: "Inscrit, pas encore d'épisode", ton: "bulle" },
+-  qualified: { texte: "1er épisode terminé", ton: "succes" },
+-  checking: { texte: "En vérification", ton: "soleil" },
+-  cancelled: { texte: "Non retenu", ton: "bulle" },
+-} as const;
++const etat = (s: "pending" | "qualified" | "checking" | "cancelled") => ({
++  pending: { texte: tr("Inscrit, pas encore d'épisode", "Signed up, no episode yet"), ton: "bulle" },
++  qualified: { texte: tr("1er épisode terminé", "1st episode done"), ton: "succes" },
++  checking: { texte: tr("En vérification", "Being checked"), ton: "soleil" },
++  cancelled: { texte: tr("Non retenu", "Not accepted"), ton: "bulle" },
++} as const)[s];
++
++const MISSION_EN: Record<string, string> = { first_episode: "Finish your first episode", first_share: "Share a chapter by link", testimonial: "Have a review published on the home page" };
+ 
+ function GagnerPage() {
+   const { data: g, error, isLoading } = useQuery({ queryKey: ["gagner"], queryFn: () => api<Gagner>("/me/gagner") });
+   const [copie, setCopie] = useState<string | null>(null);
+-  if (isLoading) return <Container><p className="text-encre-douce">Chargement…</p></Container>;
+-  if (error || !g) return <Container><ErrorNote error={error ?? new Error("Indisponible.")} /></Container>;
++  if (isLoading) return <Container><p className="text-encre-douce">{tr("Chargement…", "Loading…")}</p></Container>;
++  if (error || !g) return <Container><ErrorNote error={error ?? new Error(tr("Indisponible.", "Unavailable."))} /></Container>;
+ 
+   const copier = async (texte: string, quoi: string) => {
+     try { await navigator.clipboard.writeText(texte); setCopie(quoi); setTimeout(() => setCopie(null), 2500); } catch { /* refusé */ }
+   };
+-  const message = `Je crée mes propres mangas avec MangaStudio : tu décris une idée, il dessine les pages. Inscris-toi avec mon lien, tu reçois ${g.rewards.invitee} crédits en plus : ${g.link}`;
+-  const lundi = new Date(g.weekly_refill.next).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
++  const message = tr(
++    `Je crée mes propres mangas avec MangaStudio : tu décris une idée, il dessine les pages. Inscris-toi avec mon lien, tu reçois ${g.rewards.invitee} crédits en plus : ${g.link}`,
++    `I make my own manga with MangaStudio: you describe an idea, it draws the pages. Sign up with my link and get ${g.rewards.invitee} extra credits: ${g.link}`,
++  );
++  const lundi = new Date(g.weekly_refill.next).toLocaleDateString(intlLocale(), { weekday: "long", day: "numeric", month: "long" });
+ 
+   return (
+     <Container className="max-w-[960px]">
+-      <PageTitle sub="Invitez vos amis, accomplissez les missions et revenez chaque semaine : vos crédits gratuits s'ajoutent à votre solde.">
+-        Gagner des crédits
++      <PageTitle sub={tr("Invitez vos amis, accomplissez les missions et revenez chaque semaine : vos crédits gratuits s'ajoutent à votre solde.", "Invite your friends, complete missions and come back every week: your free credits are added to your balance.")}>
++        {tr("Gagner des crédits", "Earn credits")}
+       </PageTitle>
+ 
+       <Card featured className="relative">
+         <Onomatopee className="absolute -top-5 right-4">+{g.rewards.referrer}</Onomatopee>
+-        <h2 className="flex items-center gap-2 font-display text-[24px] leading-[30px]"><Users size={24} strokeWidth={2} aria-hidden />Invitez vos amis</h2>
++        <h2 className="flex items-center gap-2 font-display text-[24px] leading-[30px]"><Users size={24} strokeWidth={2} aria-hidden />{tr("Invitez vos amis", "Invite your friends")}</h2>
+         <ul className="mt-3 flex flex-col gap-1 leading-7">
+-          <li>Votre ami reçoit <b>{g.rewards.invitee} crédits</b> en plus à la confirmation de son adresse.</li>
+-          <li>Vous recevez <b>{g.rewards.referrer} crédits</b> quand il termine son premier épisode.</li>
+-          <li>Et <b>{g.rewards.purchase} crédits</b> de plus à son premier achat.</li>
++          <li>{tr("Votre ami reçoit ", "Your friend gets ")}<b>{g.rewards.invitee} {tr("crédits", "credits")}</b>{tr(" en plus à la confirmation de son adresse.", " extra when they confirm their email.")}</li>
++          <li>{tr("Vous recevez ", "You get ")}<b>{g.rewards.referrer} {tr("crédits", "credits")}</b>{tr(" quand il termine son premier épisode.", " when they finish their first episode.")}</li>
++          <li>{tr("Et ", "And ")}<b>{g.rewards.purchase} {tr("crédits", "credits")}</b>{tr(" de plus à son premier achat.", " more on their first purchase.")}</li>
+         </ul>
+         <div className="mt-5 grid gap-3 sm:grid-cols-[auto_1fr]">
+           <div>
+-            <p className="label-caps mb-1">Votre code</p>
++            <p className="label-caps mb-1">{tr("Votre code", "Your code")}</p>
+             <button onClick={() => copier(g.code, "code")} className="tabular flex min-h-12 items-center gap-2 rounded-[4px] border-2 border-encre bg-blanc px-4 text-[22px] font-bold tracking-[0.15em]">
+-              {g.code}{copie === "code" ? <Check size={18} strokeWidth={2} aria-label="copié" /> : <Copy size={18} strokeWidth={2} aria-hidden />}
++              {g.code}{copie === "code" ? <Check size={18} strokeWidth={2} aria-label={tr("copié", "copied")} /> : <Copy size={18} strokeWidth={2} aria-hidden />}
+             </button>
+           </div>
+           <div className="min-w-0">
+-            <p className="label-caps mb-1">Votre lien d'invitation</p>
++            <p className="label-caps mb-1">{tr("Votre lien d'invitation", "Your invite link")}</p>
+             <div className="flex gap-2">
+-              <input readOnly value={g.link} aria-label="Lien d'invitation" onFocus={(e) => e.currentTarget.select()}
++              <input readOnly value={g.link} aria-label={tr("Lien d'invitation", "Invite link")} onFocus={(e) => e.currentTarget.select()}
+                 className="tabular min-h-12 min-w-0 flex-1 rounded-[4px] border-2 border-encre bg-blanc px-3 text-[14px]" />
+-              <Button onClick={() => copier(g.link, "lien")}>{copie === "lien" ? "Copié" : "Copier"}</Button>
++              <Button onClick={() => copier(g.link, "lien")}>{copie === "lien" ? tr("Copié", "Copied") : tr("Copier", "Copy")}</Button>
+             </div>
+           </div>
+         </div>
+         <div className="mt-4 flex flex-wrap gap-2">
+           <a href={`https://wa.me/?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer"
+-            className="inline-flex min-h-11 items-center rounded-[4px] border-2 border-encre bg-[#25D366] px-4 font-bold text-encre">Inviter sur WhatsApp</a>
++            className="inline-flex min-h-11 items-center rounded-[4px] border-2 border-encre bg-[#25D366] px-4 font-bold text-encre">{tr("Inviter sur WhatsApp", "Invite on WhatsApp")}</a>
+           <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(g.link)}`} target="_blank" rel="noreferrer"
+             className="inline-flex min-h-11 items-center rounded-[4px] border-2 border-encre bg-[#1877F2] px-4 font-bold text-white">Facebook</a>
+         </div>
+         <p className="mt-4 text-[13px] leading-5 text-encre-douce">
+-          Vos chapitres partagés et vos PDF portent aussi votre code. Jusqu'à {g.rewards.max} amis récompensés. Les invitations suspectes (comptes en série, même connexion) sont vérifiées avant d'être récompensées.
++          {tr(`Vos chapitres partagés et vos PDF portent aussi votre code. Jusqu'à ${g.rewards.max} amis récompensés. Les invitations suspectes (comptes en série, même connexion) sont vérifiées avant d'être récompensées.`,
++            `Your shared chapters and PDFs also carry your code. Up to ${g.rewards.max} friends rewarded. Suspicious invitations (accounts in bulk, same connection) are checked before being rewarded.`)}
+         </p>
+       </Card>
+ 
+       <div className="mt-8 grid gap-6 md:grid-cols-2">
+         <Card>
+-          <h2 className="font-display text-[22px] leading-[28px]">Vos amis invités</h2>
++          <h2 className="font-display text-[22px] leading-[28px]">{tr("Vos amis invités", "Friends you invited")}</h2>
+           <p className="mt-1 text-encre-douce">
+-            <span className="tabular font-bold text-encre">{g.earned}</span> crédits gagnés · <span className="tabular">{g.rewarded_count}</span> / {g.rewards.max} amis récompensés
++            <span className="tabular font-bold text-encre">{g.earned}</span>{tr(" crédits gagnés · ", " credits earned · ")}<span className="tabular">{g.rewarded_count}</span> / {g.rewards.max}{tr(" amis récompensés", " friends rewarded")}
+           </p>
+           {g.referrals.length === 0 ? (
+-            <p className="mt-4 text-encre-douce">Personne pour l'instant. Partagez votre lien !</p>
++            <p className="mt-4 text-encre-douce">{tr("Personne pour l'instant. Partagez votre lien !", "Nobody yet. Share your link!")}</p>
+           ) : (
+             <ul className="mt-4 flex flex-col divide-y divide-trait">
+               {g.referrals.map((r, i) => (
+                 <li key={i} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                   <span className="font-bold">{r.name}</span>
+-                  <span className="flex gap-1"><Pill tone={ETAT[r.status].ton}>{ETAT[r.status].texte}</Pill>{r.purchase_rewarded && <Pill tone="succes">+{g.rewards.purchase} achat</Pill>}</span>
++                  <span className="flex gap-1"><Pill tone={etat(r.status).ton}>{etat(r.status).texte}</Pill>{r.purchase_rewarded && <Pill tone="succes">+{g.rewards.purchase} {tr("achat", "purchase")}</Pill>}</span>
+                 </li>
+               ))}
+             </ul>
+@@ -101,26 +108,26 @@ function GagnerPage() {
+ 
+         <div className="flex flex-col gap-6">
+           <Card>
+-            <h2 className="flex items-center gap-2 font-display text-[22px] leading-[28px]"><Gift size={22} strokeWidth={2} aria-hidden />Missions</h2>
++            <h2 className="flex items-center gap-2 font-display text-[22px] leading-[28px]"><Gift size={22} strokeWidth={2} aria-hidden />{tr("Missions", "Missions")}</h2>
+             <ul className="mt-3 flex flex-col gap-2">
+               {g.missions.map((m) => (
+                 <li key={m.id} className="flex items-center gap-3">
+                   <span className={`flex size-7 shrink-0 items-center justify-center rounded-full border-2 border-encre ${m.done ? "bg-succes text-bulle" : "bg-bulle"}`}>
+-                    {m.done && <Check size={16} strokeWidth={3} aria-label="fait" />}
++                    {m.done && <Check size={16} strokeWidth={3} aria-label={tr("fait", "done")} />}
+                   </span>
+-                  <span className={m.done ? "text-encre-douce line-through" : ""}>{m.label}</span>
++                  <span className={m.done ? "text-encre-douce line-through" : ""}>{tr(m.label, MISSION_EN[m.id] ?? m.label)}</span>
+                   <span className="tabular ml-auto font-bold">+{m.credits}</span>
+                 </li>
+               ))}
+             </ul>
+-            <p className="mt-3 text-[13px] text-encre-douce">Partager : depuis un épisode terminé. Avis : <Link to="/mon-avis" className="underline">donner mon avis</Link>.</p>
++            <p className="mt-3 text-[13px] text-encre-douce">{tr("Partager : depuis un épisode terminé. Avis : ", "Share: from a finished episode. Review: ")}<Link to="/mon-avis" className="underline">{tr("donner mon avis", "leave a review")}</Link>.</p>
+           </Card>
+           <Card>
+-            <h2 className="flex items-center gap-2 font-display text-[22px] leading-[28px]"><CalendarClock size={22} strokeWidth={2} aria-hidden />Recharge de la semaine</h2>
++            <h2 className="flex items-center gap-2 font-display text-[22px] leading-[28px]"><CalendarClock size={22} strokeWidth={2} aria-hidden />{tr("Recharge de la semaine", "Weekly top-up")}</h2>
+             <p className="mt-2 leading-7">
+-              Avec le plan gratuit, votre solde remonte à <b>{g.weekly_refill.amount} crédits</b> chaque semaine, à votre première visite. Prochaine recharge à partir du <b>{lundi}</b>.
++              {tr("Avec le plan gratuit, votre solde remonte à ", "On the free plan, your balance goes back up to ")}<b>{g.weekly_refill.amount} {tr("crédits", "credits")}</b>{tr(" chaque semaine, à votre première visite. Prochaine recharge à partir du ", " every week, on your first visit. Next top-up from ")}<b>{lundi}</b>.
+             </p>
+-            <p className="mt-1 text-[13px] text-encre-douce">Elle ne s'additionne pas : si vous avez déjà {g.weekly_refill.amount} crédits ou plus, rien ne change.</p>
++            <p className="mt-1 text-[13px] text-encre-douce">{tr(`Elle ne s'additionne pas : si vous avez déjà ${g.weekly_refill.amount} crédits ou plus, rien ne change.`, `It doesn't add up: if you already have ${g.weekly_refill.amount} credits or more, nothing changes.`)}</p>
+           </Card>
+         </div>
+       </div>
+diff --git a/frontend/src/routes/galerie.$id.tsx b/frontend/src/routes/galerie.$id.tsx
+index 1cd0141..21cb0c4 100644
+--- a/frontend/src/routes/galerie.$id.tsx
++++ b/frontend/src/routes/galerie.$id.tsx
+@@ -1,6 +1,6 @@
+ import { createFileRoute, Link } from "@tanstack/react-router";
+ import { useQuery } from "@tanstack/react-query";
+-import { ChevronLeft, Sparkles } from "lucide-react";
++import { ChevronLeft, Sparkles, Trophy } from "lucide-react";
+ import { api } from "@/lib/api";
+ import { titreHistoire, type Histoire } from "@/lib/galerie";
+ import { styleParId } from "@/content/styles";
+@@ -8,9 +8,10 @@ import { BoutonJaime } from "@/components/galerie/BoutonJaime";
+ import { btnClass, Container, ErrorNote } from "@/components/ink";
+ import { useToken } from "@/lib/session";
+ import { cn } from "@/lib/utils";
++import { tr } from "@/lib/i18n";
+ 
+ export const Route = createFileRoute("/galerie/$id")({
+-  head: () => ({ meta: [{ title: "À lire — MangaStudio" }] }),
++  head: () => ({ meta: [{ title: tr("À lire — MangaStudio", "Read — MangaStudio") }] }),
+   component: Lecture,
+ });
+ 
+@@ -23,28 +24,34 @@ function Lecture() {
+   return (
+     <Container className="max-w-[900px]">
+       <Link to="/galerie" className="mb-6 inline-flex min-h-11 items-center gap-1 font-bold hover:underline">
+-        <ChevronLeft size={18} strokeWidth={2.5} aria-hidden />Toutes les histoires
++        <ChevronLeft size={18} strokeWidth={2.5} aria-hidden />{tr("Toutes les histoires", "All stories")}
+       </Link>
+-      {isLoading && <p className="text-encre-douce">Chargement…</p>}
++      {isLoading && <p className="text-encre-douce">{tr("Chargement…", "Loading…")}</p>}
+       <ErrorNote error={error} />
+       {h && (
+         <>
+           <header className="mb-8">
+-            {h.featured && <p className="mb-2 inline-flex items-center gap-1 rounded-full border-2 border-encre bg-soleil px-3 py-0.5 text-[13px] font-bold"><Sparkles size={14} strokeWidth={2.5} aria-hidden />Coup de cœur de l'équipe</p>}
++            {h.awards?.map((a) => (
++              <Link key={a.slug} to="/concours/$slug" params={{ slug: a.slug }}
++                className="mb-2 mr-2 inline-flex items-center gap-1 rounded-full border-2 border-encre bg-soleil px-3 py-0.5 text-[13px] font-bold hover:underline">
++                <Trophy size={14} strokeWidth={2.5} aria-hidden />{a.label}
++              </Link>
++            ))}
++            {h.featured && <p className="mb-2 inline-flex items-center gap-1 rounded-full border-2 border-encre bg-soleil px-3 py-0.5 text-[13px] font-bold"><Sparkles size={14} strokeWidth={2.5} aria-hidden />{tr("Coup de cœur de l'équipe", "Staff pick")}</p>}
+             <h1 className="font-display text-[32px] leading-[38px] sm:text-[40px] sm:leading-[46px]">{titreHistoire(h)}</h1>
+-            <p className="mt-2 text-encre-douce">par <b className="text-encre">{h.author}</b>{style && <> · style {style}</>} · {h.pages} pages</p>
++            <p className="mt-2 text-encre-douce">{tr("par ", "by ")}<b className="text-encre">{h.author}</b>{style && <> · {tr("style", "style")} {style}</>} · {h.pages} pages</p>
+             {h.premise && <p className="mt-4 max-w-2xl text-[17px] leading-7">{h.premise}</p>}
+             <div className="mt-5"><BoutonJaime id={h.id} likes={h.likes} liked={h.liked} mine={h.is_author} grand /></div>
+           </header>
+           <ol className="flex flex-col gap-6">
+             {h.page_urls.map((u, i) => (
+-              <li key={u}><img src={u} alt={`Page ${i + 1} sur ${h.page_urls.length}`} loading={i < 2 ? "eager" : "lazy"} className="w-full rounded-[4px] border-2 border-encre bg-bulle" /></li>
++              <li key={u}><img src={u} alt={tr(`Page ${i + 1} sur ${h.page_urls.length}`, `Page ${i + 1} of ${h.page_urls.length}`)} loading={i < 2 ? "eager" : "lazy"} className="w-full rounded-[4px] border-2 border-encre bg-bulle" /></li>
+             ))}
+           </ol>
+           <div className="mt-10 flex flex-col items-center gap-4 rounded-[8px] border-2 border-encre bg-bulle p-6 text-center shadow-ink">
+-            <p className="font-display text-[22px] leading-[28px]">Vous avez aimé ?</p>
++            <p className="font-display text-[22px] leading-[28px]">{tr("Vous avez aimé ?", "Did you like it?")}</p>
+             <BoutonJaime id={h.id} likes={h.likes} liked={h.liked} mine={h.is_author} grand />
+-            {!token && <Link to="/inscription" className={cn(btnClass("primary"))}>Créer mon manga gratuitement</Link>}
++            {!token && <Link to="/inscription" className={cn(btnClass("primary"))}>{tr("Créer mon manga gratuitement", "Create my manga for free")}</Link>}
+           </div>
+         </>
+       )}
+diff --git a/frontend/src/routes/galerie.index.tsx b/frontend/src/routes/galerie.index.tsx
+index b31b8c5..d5fa5e7 100644
+--- a/frontend/src/routes/galerie.index.tsx
++++ b/frontend/src/routes/galerie.index.tsx
+@@ -7,19 +7,24 @@ import { CarteHistoire } from "@/components/galerie/CarteHistoire";
+ import { Pager } from "@/components/admin";
+ import { btnClass, Container, ErrorNote, PageTitle } from "@/components/ink";
+ import { cn } from "@/lib/utils";
++import { tr } from "@/lib/i18n";
+ 
+-const TRIS: [TriGalerie, string][] = [["recentes", "Nouveautés"], ["semaine", "Les plus aimées de la semaine"], ["populaires", "Les plus aimées"], ["coups", "Coups de cœur"]];
++const TRIS: TriGalerie[] = ["recentes", "semaine", "populaires", "coups"];
++const triLabel = (t: TriGalerie) => ({
++  recentes: tr("Nouveautés", "New"), semaine: tr("Les plus aimées de la semaine", "Most liked this week"),
++  populaires: tr("Les plus aimées", "Most liked"), coups: tr("Coups de cœur", "Staff picks"),
++})[t];
+ 
+ export const Route = createFileRoute("/galerie/")({
+   validateSearch: (s: Record<string, unknown>): { tri?: TriGalerie; page?: number } => ({
+-    ...(TRIS.some(([t]) => t === s.tri) ? { tri: s.tri as TriGalerie } : {}),
++    ...(TRIS.some((t) => t === s.tri) ? { tri: s.tri as TriGalerie } : {}),
+     ...(Number(s.page) > 1 ? { page: Number(s.page) } : {}),
+   }),
+   head: () => ({
+     meta: [
+-      { title: "À lire — les mangas de la communauté MangaStudio" },
+-      { name: "description", content: "Lisez gratuitement les chapitres de manga créés par les auteurs de MangaStudio, et aimez vos préférés." },
+-      { property: "og:title", content: "À lire — les mangas de la communauté MangaStudio" },
++      { title: tr("À lire — les mangas de la communauté MangaStudio", "Read — manga from the MangaStudio community") },
++      { name: "description", content: tr("Lisez gratuitement les chapitres de manga créés par les auteurs de MangaStudio, et aimez vos préférés.", "Read manga chapters created by MangaStudio authors for free, and like your favourites.") },
++      { property: "og:title", content: tr("À lire — les mangas de la communauté MangaStudio", "Read — manga from the MangaStudio community") },
+     ],
+   }),
+   component: Galerie,
+@@ -35,9 +40,9 @@ function Galerie() {
+   });
+   return (
+     <Container className="max-w-[1200px]">
+-      <PageTitle sub="Des chapitres créés par les auteurs de MangaStudio, relus par l'équipe avant publication. Lecture libre, sans compte.">À lire</PageTitle>
+-      <div className="mb-8 flex flex-wrap gap-2" role="tablist" aria-label="Trier les histoires">
+-        {TRIS.map(([v, l]) => (
++      <PageTitle sub={tr("Des chapitres créés par les auteurs de MangaStudio, relus par l'équipe avant publication. Lecture libre, sans compte.", "Chapters created by MangaStudio authors, reviewed by the team before publishing. Free to read, no account needed.")}>{tr("À lire", "Read")}</PageTitle>
++      <div className="mb-8 flex flex-wrap gap-2" role="tablist" aria-label={tr("Trier les histoires", "Sort stories")}>
++        {TRIS.map((v) => [v, triLabel(v)] as const).map(([v, l]) => (
+           <button key={v} role="tab" aria-selected={tri === v} onClick={() => nav({ search: { tri: v } })}
+             className={cn("min-h-11 rounded-[4px] border-2 border-encre px-4 font-bold", tri === v ? "bg-encre text-bulle" : "bg-bulle hover:bg-soleil")}>
+             {l}
+@@ -45,15 +50,15 @@ function Galerie() {
+         ))}
+       </div>
+       <ErrorNote error={error} />
+-      {isLoading && <p className="text-encre-douce">Chargement…</p>}
++      {isLoading && <p className="text-encre-douce">{tr("Chargement…", "Loading…")}</p>}
+       {data && data.items.length === 0 && (
+         <div className="mx-auto max-w-xl rounded-[8px] border-2 border-dashed border-encre bg-bulle p-8 text-center">
+           <BookOpen size={36} strokeWidth={2} aria-hidden className="mx-auto" />
+           <p className="mt-3 font-display text-[22px] leading-[28px]">
+-            {tri === "coups" ? "Pas encore de coup de cœur." : "La galerie attend ses premières histoires."}
++            {tri === "coups" ? tr("Pas encore de coup de cœur.", "No staff picks yet.") : tr("La galerie attend ses premières histoires.", "The gallery is waiting for its first stories.")}
+           </p>
+-          <p className="mt-2 text-encre-douce">Créez un épisode, puis proposez-le depuis sa page : il apparaîtra ici après relecture.</p>
+-          <Link to="/" className={cn(btnClass("primary"), "mt-5")}>Créer mon manga</Link>
++          <p className="mt-2 text-encre-douce">{tr("Créez un épisode, puis proposez-le depuis sa page : il apparaîtra ici après relecture.", "Create an episode, then submit it from its page: it will appear here after review.")}</p>
++          <Link to="/" className={cn(btnClass("primary"), "mt-5")}>{tr("Créer mon manga", "Create my manga")}</Link>
+         </div>
+       )}
+       <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+@@ -61,8 +66,8 @@ function Galerie() {
+       </ul>
+       {data && data.pages > 1 && <Pager page={data.page} pages={data.pages} total={data.total} onPage={(p) => nav({ search: { tri, page: p } })} />}
+       <p className="mt-10 text-[14px] text-encre-douce">
+-        <Link to="/regles-publication" className="font-bold text-indigo underline">Règles de publication</Link> · Un contenu vous choque ?{" "}
+-        <Link to="/contact" className="font-bold text-indigo underline">Signalez-le-nous</Link>.
++        <Link to="/regles-publication" className="font-bold text-indigo underline">{tr("Règles de publication", "Publishing rules")}</Link>{tr(" · Un contenu vous choque ? ", " · Found something offensive? ")}
++        <Link to="/contact" className="font-bold text-indigo underline">{tr("Signalez-le-nous", "Report it to us")}</Link>.
+       </p>
+     </Container>
+   );
+diff --git a/frontend/src/routes/index.tsx b/frontend/src/routes/index.tsx
+index 172fd7b..57b87b2 100644
+--- a/frontend/src/routes/index.tsx
++++ b/frontend/src/routes/index.tsx
+@@ -7,7 +7,9 @@ import { api, type SeriesItem } from "@/lib/api";
+ import { useMe, useToken } from "@/lib/session";
+ import { Accueil } from "@/components/accueil/Accueil";
+ import { ApercuGalerie } from "@/components/galerie/ApercuGalerie";
+-import { STYLES_MANGA, styleParId } from "@/content/styles";
++import { BandeauConcours } from "@/components/BandeauConcours";
++import { styleParId, stylesManga } from "@/content/styles";
++import { getLang, tr } from "@/lib/i18n";
+ import { VignetteStyle } from "@/components/StyleManga";
+ import { Button, Card, Container, ErrorNote, Field, PageTitle, RequireAuth, Textarea } from "@/components/ink";
+ import { cn } from "@/lib/utils";
+@@ -17,10 +19,10 @@ export const Route = createFileRoute("/")({
+   validateSearch: (search: Record<string, unknown>): { style?: string } => (typeof search.style === "string" ? { style: search.style } : {}),
+   head: () => ({
+     meta: [
+-      { title: "MangaStudio — Vos idées deviennent des épisodes de manga" },
+-      { name: "description", content: "Décrivez une idée, ajoutez vos personnages : MangaStudio dessine vos épisodes de manga, page après page." },
+-      { property: "og:title", content: "MangaStudio — Vos idées deviennent des épisodes de manga" },
+-      { property: "og:description", content: "Un studio en ligne qui transforme une idée et des personnages en épisodes de manga." },
++      { title: tr("MangaStudio — Vos idées deviennent des épisodes de manga", "MangaStudio — Your ideas become manga episodes") },
++      { name: "description", content: tr("Décrivez une idée, ajoutez vos personnages : MangaStudio dessine vos épisodes de manga, page après page.", "Describe an idea, add your characters: MangaStudio draws your manga episodes, page after page.") },
++      { property: "og:title", content: tr("MangaStudio — Vos idées deviennent des épisodes de manga", "MangaStudio — Your ideas become manga episodes") },
++      { property: "og:description", content: tr("Un studio en ligne qui transforme une idée et des personnages en épisodes de manga.", "An online studio that turns an idea and characters into manga episodes.") },
+       { property: "og:type", content: "website" },
+       { name: "twitter:card", content: "summary_large_image" },
+     ],
+@@ -55,7 +57,7 @@ function MesSeries() {
+   const { style: styleDemande } = Route.useSearch();
+   const [style, setStyle] = useState(styleDemande && styleParId(styleDemande) ? styleDemande : "shonen");
+   const [render, setRender] = useState("bw");
+-  const [lang, setLang] = useState("fr");
++  const [lang, setLang] = useState<string>(getLang());       // langue des bulles : celle du site par défaut
+   const create = useMutation({
+     mutationFn: () => api<{ id: string }>("/series", { body: { premise: idea, style, palette: render, language: lang } }),
+     onSuccess: (s) => { qc.invalidateQueries({ queryKey: ["series"] }); nav({ to: "/series/$id", params: { id: String(s.id) } }); },
+@@ -65,18 +67,19 @@ function MesSeries() {
+ 
+   return (
+     <Container>
+-      <PageTitle sub={me ? `Bonjour ${me.display_name}, voici vos séries.` : undefined}>Mes séries</PageTitle>
++      <PageTitle sub={me ? tr(`Bonjour ${me.display_name}, voici vos séries.`, `Hello ${me.display_name}, here are your series.`) : undefined}>{tr("Mes séries", "My series")}</PageTitle>
++      <BandeauConcours className="mb-8" />
+       {!!me?.weekly_refill && (
+         <p role="status" className="mb-6 rounded-[4px] border-2 border-encre bg-soleil px-4 py-3 font-bold">
+-          Recharge de la semaine : +{me.weekly_refill} crédits. <Link to="/gagner" className="underline">Gagner plus de crédits</Link>
++          {tr(`Recharge de la semaine : +${me.weekly_refill} crédits. `, `Weekly top-up: +${me.weekly_refill} credits. `)}<Link to="/gagner" className="underline">{tr("Gagner plus de crédits", "Earn more credits")}</Link>
+         </p>
+       )}
+       <div className="grid gap-8 lg:grid-cols-[1fr_380px]">
+-        <section aria-label="Vos séries">
+-          {isLoading && <p className="text-encre-douce">Chargement de vos séries…</p>}
++        <section aria-label={tr("Vos séries", "Your series")}>
++          {isLoading && <p className="text-encre-douce">{tr("Chargement de vos séries…", "Loading your series…")}</p>}
+           <ErrorNote error={error} />
+           {!isLoading && !error && list.length === 0 && (
+-            <Card><p>Vous n'avez encore aucune série. Décrivez votre idée dans le formulaire pour commencer.</p></Card>
++            <Card><p>{tr("Vous n'avez encore aucune série. Décrivez votre idée dans le formulaire pour commencer.", "You don't have any series yet. Describe your idea in the form to get started.")}</p></Card>
+           )}
+           <ul className="grid grid-cols-2 gap-6 sm:grid-cols-3">
+             {list.map((s) => (
+@@ -91,47 +94,47 @@ function MesSeries() {
+           </ul>
+         </section>
+         <Card featured className="h-fit">
+-          <h2 className="font-display text-[24px] leading-[30px]">Nouvelle série</h2>
++          <h2 className="font-display text-[24px] leading-[30px]">{tr("Nouvelle série", "New series")}</h2>
+           <form className="mt-6 flex flex-col gap-6" onSubmit={(e) => { e.preventDefault(); if (!tooShort) create.mutate(); }}>
+-            <Field label="Votre idée" htmlFor="idea" hint={<>
++            <Field label={tr("Votre idée", "Your idea")} htmlFor="idea" hint={<>
+               <p className="text-right text-[12px] text-encre-douce"><span className="tabular">{idea.length}</span> / <span className="tabular">1500</span></p>
+               {blocked && <ErrorNote inline error={create.error} />}
+             </>}>
+-              <Textarea id="idea" required minLength={8} maxLength={1500} value={idea} onChange={(e) => setIdea(e.target.value)} placeholder="Une lycéenne découvre que son chat garde le portail entre deux mondes…" aria-invalid={blocked} />
++              <Textarea id="idea" required minLength={8} maxLength={1500} value={idea} onChange={(e) => setIdea(e.target.value)} placeholder={tr("Une lycéenne découvre que son chat garde le portail entre deux mondes…", "A schoolgirl discovers her cat guards the gate between two worlds…")} aria-invalid={blocked} />
+             </Field>
+             <fieldset className="flex flex-col gap-2">
+-              <legend className="label-caps mb-2">Style</legend>
++              <legend className="label-caps mb-2">{tr("Style", "Style")}</legend>
+               <div className="flex flex-col gap-2">
+-                {STYLES_MANGA.map((s) => {
++                {stylesManga().map((s) => {
+                   const on = style === s.id;
+                   return (
+                     <label key={s.id} className={cn("flex cursor-pointer items-center gap-3 rounded-[4px] border-2 border-encre p-2", on ? "bg-vermillon text-sur-vermillon" : "bg-bulle hover:bg-papier")}>
+                       <input type="radio" name="style" value={s.id} checked={on} onChange={() => setStyle(s.id)} className="sr-only" />
+                       <VignetteStyle style={s} className="aspect-[2/3] w-12 shrink-0" />
+                       <span className="min-w-0">
+-                        <span className="flex items-center gap-2 font-bold">{s.nom}{s.nouveau && <span className="rounded-full bg-soleil px-2 text-[11px] text-encre">Nouveau</span>}</span>
++                        <span className="flex items-center gap-2 font-bold">{s.nom}{s.nouveau && <span className="rounded-full bg-soleil px-2 text-[11px] text-encre">{tr("Nouveau", "New")}</span>}</span>
+                         <span className={cn("block text-[13px] leading-5", on ? "text-sur-vermillon" : "text-encre-douce")}>{s.accroche}</span>
+                       </span>
+                     </label>
+                   );
+                 })}
+               </div>
+-              <Link to="/styles" target="_blank" className="mt-1 self-start text-[14px] font-bold text-indigo underline">Voir les styles en détail (nouvel onglet)</Link>
++              <Link to="/styles" target="_blank" className="mt-1 self-start text-[14px] font-bold text-indigo underline">{tr("Voir les styles en détail (nouvel onglet)", "See the styles in detail (new tab)")}</Link>
+             </fieldset>
+-            <fieldset><legend className="label-caps mb-2">Rendu</legend>
++            <fieldset><legend className="label-caps mb-2">{tr("Rendu", "Rendering")}</legend>
+               <div className="grid grid-cols-2 gap-2">
+-                <Choice name="render" value="bw" label="Noir et blanc" current={render} onChange={setRender} />
+-                <Choice name="render" value="color" label="Couleur" current={render} onChange={setRender} disabled={!me?.plan.color} note={!me?.plan.color ? "non inclus" : undefined} />
++                <Choice name="render" value="bw" label={tr("Noir et blanc", "Black & white")} current={render} onChange={setRender} />
++                <Choice name="render" value="color" label={tr("Couleur", "Colour")} current={render} onChange={setRender} disabled={!me?.plan.color} note={!me?.plan.color ? tr("non inclus", "not included") : undefined} />
+               </div>
+             </fieldset>
+-            <fieldset><legend className="label-caps mb-2">Langue</legend>
++            <fieldset><legend className="label-caps mb-2">{tr("Langue des bulles", "Balloon language")}</legend>
+               <div className="grid grid-cols-2 gap-2">
+-                <Choice name="lang" value="fr" label="Français" current={lang} onChange={setLang} />
+-                <Choice name="lang" value="en" label="Anglais" current={lang} onChange={setLang} />
++                <Choice name="lang" value="fr" label={tr("Français", "French")} current={lang} onChange={setLang} />
++                <Choice name="lang" value="en" label={tr("Anglais", "English")} current={lang} onChange={setLang} />
+               </div>
+             </fieldset>
+             {!blocked && <ErrorNote error={create.error} />}
+-            <Button type="submit" variant="primary" disabled={create.isPending || tooShort}><Plus size={20} strokeWidth={2} aria-hidden />{create.isPending ? "Création…" : "Créer la série"}</Button>
++            <Button type="submit" variant="primary" disabled={create.isPending || tooShort}><Plus size={20} strokeWidth={2} aria-hidden />{create.isPending ? tr("Création…", "Creating…") : tr("Créer la série", "Create the series")}</Button>
+           </form>
+         </Card>
+       </div>
+diff --git a/frontend/src/routes/inscription.tsx b/frontend/src/routes/inscription.tsx
+index ce6b4c5..e7edf64 100644
+--- a/frontend/src/routes/inscription.tsx
++++ b/frontend/src/routes/inscription.tsx
+@@ -1,7 +1,8 @@
+ import { createFileRoute } from "@tanstack/react-router";
+ import { AuthForm } from "@/components/AuthForm";
++import { tr } from "@/lib/i18n";
+ 
+ export const Route = createFileRoute("/inscription")({
+-  head: () => ({ meta: [{ title: "Inscription — MangaStudio" }, { name: "description", content: "Créez votre compte MangaStudio et lancez votre premier épisode." }] }),
++  head: () => ({ meta: [{ title: tr("Inscription — MangaStudio", "Sign up — MangaStudio") }, { name: "description", content: tr("Créez votre compte MangaStudio et lancez votre premier épisode.", "Create your MangaStudio account and start your first episode.") }] }),
+   component: () => <AuthForm mode="register" />,
+ });
+diff --git a/frontend/src/routes/mon-avis.tsx b/frontend/src/routes/mon-avis.tsx
+index 98d6b65..e857a3f 100644
+--- a/frontend/src/routes/mon-avis.tsx
++++ b/frontend/src/routes/mon-avis.tsx
+@@ -1,13 +1,14 @@
+ import { createFileRoute } from "@tanstack/react-router";
+ import { Container, PageTitle, RequireAuth } from "@/components/ink";
+ import { DonnerAvis } from "@/components/DonnerAvis";
++import { tr } from "@/lib/i18n";
+ 
+ export const Route = createFileRoute("/mon-avis")({
+-  head: () => ({ meta: [{ title: "Mon avis — MangaStudio" }] }),
++  head: () => ({ meta: [{ title: tr("Mon avis — MangaStudio", "My review — MangaStudio") }] }),
+   component: () => (
+     <RequireAuth>
+       <Container className="max-w-[760px]">
+-        <PageTitle sub="Votre avis apparaît sur la page d'accueil après une rapide relecture. Vous pouvez le modifier ou le retirer à tout moment.">Mon avis</PageTitle>
++        <PageTitle sub={tr("Votre avis apparaît sur la page d'accueil après une rapide relecture. Vous pouvez le modifier ou le retirer à tout moment.", "Your review appears on the home page after a quick check. You can edit or remove it at any time.")}>{tr("Mon avis", "My review")}</PageTitle>
+         <DonnerAvis />
+       </Container>
+     </RequireAuth>
+diff --git a/frontend/src/routes/mot-de-passe-oublie.tsx b/frontend/src/routes/mot-de-passe-oublie.tsx
+index 0b01318..3577f25 100644
+--- a/frontend/src/routes/mot-de-passe-oublie.tsx
++++ b/frontend/src/routes/mot-de-passe-oublie.tsx
+@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
+ import { KeyRound } from "lucide-react";
+ import { api, tokenStore } from "@/lib/api";
+ import { Button, Card, ErrorNote, Field, Input } from "@/components/ink";
++import { tr } from "@/lib/i18n";
+ 
+ export const Route = createFileRoute("/mot-de-passe-oublie")({
+-  head: () => ({ meta: [{ title: "Mot de passe oublié — MangaStudio" }, { name: "robots", content: "noindex" }] }),
++  head: () => ({ meta: [{ title: tr("Mot de passe oublié — MangaStudio", "Forgot password — MangaStudio") }, { name: "robots", content: "noindex" }] }),
+   component: MotDePasseOublie,
+ });
+ 
+@@ -42,52 +43,52 @@ function MotDePasseOublie() {
+     <main className="flex justify-center px-4 py-12 sm:py-16">
+       <Card featured className="w-full max-w-[460px]">
+         <KeyRound size={40} strokeWidth={2} aria-hidden className="text-vermillon" />
+-        <h1 className="mt-3 font-display text-[30px] leading-[36px]">Mot de passe oublié</h1>
++        <h1 className="mt-3 font-display text-[30px] leading-[36px]">{tr("Mot de passe oublié", "Forgot your password")}</h1>
+ 
+         {etape === "adresse" ? (
+           <>
+-            <p className="mt-2 text-encre-douce">Indiquez l'adresse de votre compte : nous vous envoyons un code pour choisir un nouveau mot de passe.</p>
++            <p className="mt-2 text-encre-douce">{tr("Indiquez l'adresse de votre compte : nous vous envoyons un code pour choisir un nouveau mot de passe.", "Enter your account's email address: we'll send you a code to choose a new password.")}</p>
+             <form className="mt-6 flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); demander.mutate(); }}>
+-              <Field label="Adresse e-mail" htmlFor="email">
++              <Field label={tr("Adresse e-mail", "Email address")} htmlFor="email">
+                 <Input id="email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
+               </Field>
+               <ErrorNote error={demander.error} />
+-              <Button type="submit" variant="primary" disabled={demander.isPending}>{demander.isPending ? "Envoi…" : "Recevoir un code"}</Button>
++              <Button type="submit" variant="primary" disabled={demander.isPending}>{demander.isPending ? tr("Envoi…", "Sending…") : tr("Recevoir un code", "Get a code")}</Button>
+             </form>
+           </>
+         ) : (
+           <>
+             <p className="mt-2 text-encre-douce">
+-              Si un compte existe pour <b className="break-all text-encre">{email}</b>, un code à 6 chiffres vient d'y être envoyé. Pensez aux courriers indésirables.
++              {tr("Si un compte existe pour ", "If an account exists for ")}<b className="break-all text-encre">{email}</b>{tr(", un code à 6 chiffres vient d'y être envoyé. Pensez aux courriers indésirables.", ", a 6-digit code has just been sent to it. Remember to check your spam folder.")}
+             </p>
+             <form className="mt-6 flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); if (!differents) changer.mutate(); }}>
+-              <Field label="Code reçu" htmlFor="code">
++              <Field label={tr("Code reçu", "Code received")} htmlFor="code">
+                 <Input id="code" required inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" maxLength={6} value={code}
+                   onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                   className="tabular text-center text-[28px] tracking-[0.4em]" placeholder="······" autoFocus />
+               </Field>
+-              <Field label="Nouveau mot de passe" htmlFor="mdp" hint={<p className="text-[12px] text-encre-douce">8 caractères au moins.</p>}>
++              <Field label={tr("Nouveau mot de passe", "New password")} htmlFor="mdp" hint={<p className="text-[12px] text-encre-douce">{tr("8 caractères au moins.", "At least 8 characters.")}</p>}>
+                 <Input id="mdp" type="password" required minLength={8} autoComplete="new-password" value={mdp} onChange={(e) => setMdp(e.target.value)} />
+               </Field>
+-              <Field label="Le même, une seconde fois" htmlFor="mdp2">
++              <Field label={tr("Le même, une seconde fois", "The same, once more")} htmlFor="mdp2">
+                 <Input id="mdp2" type="password" required minLength={8} autoComplete="new-password" value={mdp2} onChange={(e) => setMdp2(e.target.value)} />
+               </Field>
+-              {differents && <p className="text-[14px] font-bold text-alerte">Les deux mots de passe sont différents.</p>}
++              {differents && <p className="text-[14px] font-bold text-alerte">{tr("Les deux mots de passe sont différents.", "The two passwords don't match.")}</p>}
+               <ErrorNote error={changer.error ?? demander.error} />
+               <Button type="submit" variant="primary" disabled={code.length !== 6 || mdp.length < 8 || differents || changer.isPending}>
+-                {changer.isPending ? "Un instant…" : "Changer mon mot de passe"}
++                {changer.isPending ? tr("Un instant…", "One moment…") : tr("Changer mon mot de passe", "Change my password")}
+               </Button>
+-              <p className="text-[13px] text-encre-douce">Vous serez connecté ici, et déconnecté de vos autres appareils.</p>
++              <p className="text-[13px] text-encre-douce">{tr("Vous serez connecté ici, et déconnecté de vos autres appareils.", "You'll be signed in here, and signed out of your other devices.")}</p>
+             </form>
+             <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-trait pt-4 text-[14px]">
+               <Button disabled={attente > 0 || demander.isPending} onClick={() => demander.mutate()}>
+-                {attente > 0 ? `Renvoyer le code (${attente} s)` : "Renvoyer le code"}
++                {attente > 0 ? tr(`Renvoyer le code (${attente} s)`, `Resend the code (${attente} s)`) : tr("Renvoyer le code", "Resend the code")}
+               </Button>
+-              <button className="min-h-11 font-bold text-indigo underline" onClick={() => { setEtape("adresse"); setCode(""); changer.reset(); }}>Changer d'adresse</button>
++              <button className="min-h-11 font-bold text-indigo underline" onClick={() => { setEtape("adresse"); setCode(""); changer.reset(); }}>{tr("Changer d'adresse", "Use another address")}</button>
+             </div>
+           </>
+         )}
+-        <p className="mt-6 text-[14px]"><Link to="/connexion" className="inline-flex min-h-11 items-center font-bold text-indigo underline">Retour à la connexion</Link></p>
++        <p className="mt-6 text-[14px]"><Link to="/connexion" className="inline-flex min-h-11 items-center font-bold text-indigo underline">{tr("Retour à la connexion", "Back to sign in")}</Link></p>
+       </Card>
+     </main>
+   );
+diff --git a/frontend/src/routes/regles-publication.tsx b/frontend/src/routes/regles-publication.tsx
+index 69d0f31..b01288d 100644
+--- a/frontend/src/routes/regles-publication.tsx
++++ b/frontend/src/routes/regles-publication.tsx
+@@ -1,23 +1,24 @@
+ import { createFileRoute, Link } from "@tanstack/react-router";
+-import { MISE_A_JOUR, REGLES, VALIDE } from "@/content/publication";
++import { miseAJour, regles, VALIDE } from "@/content/publication";
++import { tr } from "@/lib/i18n";
+ import { Container, PageTitle } from "@/components/ink";
+ 
+ export const Route = createFileRoute("/regles-publication")({
+-  head: () => ({ meta: [{ title: "Règles de publication — MangaStudio" }] }),
++  head: () => ({ meta: [{ title: tr("Règles de publication — MangaStudio", "Publishing rules — MangaStudio") }] }),
+   component: Regles,
+ });
+ 
+ function Regles() {
+   return (
+     <Container className="max-w-[820px]">
+-      <PageTitle sub={`Pour publier un chapitre dans la galerie « À lire ». Mise à jour : ${MISE_A_JOUR}.`}>Règles de publication</PageTitle>
++      <PageTitle sub={tr(`Pour publier un chapitre dans la galerie « À lire ». Mise à jour : ${miseAJour()}.`, `To publish a chapter in the “Read” gallery. Last updated: ${miseAJour()}.`)}>{tr("Règles de publication", "Publishing rules")}</PageTitle>
+       {!VALIDE && (
+         <p className="mb-8 rounded-[4px] border-2 border-encre bg-soleil p-3 text-[14px] font-medium">
+-          Version provisoire : ces règles peuvent encore être précisées. Les chapitres déjà publiés restent soumis à la version en vigueur.
++          {tr("Version provisoire : ces règles peuvent encore être précisées. Les chapitres déjà publiés restent soumis à la version en vigueur.", "Provisional version: these rules may still be clarified. Chapters already published remain subject to the version in force.")}
+         </p>
+       )}
+       <div className="flex flex-col gap-8">
+-        {REGLES.map((r, i) => (
++        {regles().map((r, i) => (
+           <section key={r.titre}>
+             <h2 className="font-display text-[24px] leading-[30px]">{i + 1}. {r.titre}</h2>
+             <ul className="mt-3 list-disc space-y-2 pl-6 text-[17px] leading-7">
+@@ -26,7 +27,7 @@ function Regles() {
+           </section>
+         ))}
+       </div>
+-      <p className="mt-10 text-encre-douce">Une question ? <Link to="/contact" className="font-bold text-indigo underline">Contactez-nous</Link>.</p>
++      <p className="mt-10 text-encre-douce">{tr("Une question ? ", "A question? ")}<Link to="/contact" className="font-bold text-indigo underline">{tr("Contactez-nous", "Contact us")}</Link>.</p>
+     </Container>
+   );
+ }
+diff --git a/frontend/src/routes/series.$id.tsx b/frontend/src/routes/series.$id.tsx
+index 5c7855e..ff2d63e 100644
+--- a/frontend/src/routes/series.$id.tsx
++++ b/frontend/src/routes/series.$id.tsx
+@@ -2,18 +2,19 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+ import { useState } from "react";
+ import { Check, Pencil, Play, UserPlus } from "lucide-react";
+-import { api, photoToDataUrl, STATUS_LABEL, ACTIVE, type Character, type SeriesDetail } from "@/lib/api";
++import { api, photoToDataUrl, statusLabel, ACTIVE, type Character, type SeriesDetail } from "@/lib/api";
+ import { useMe } from "@/lib/session";
+ import { Button, Card, Container, ErrorNote, Field, Input, PageTitle, Pill, RequireAuth, Textarea } from "@/components/ink";
+ import { cn } from "@/lib/utils";
++import { tr } from "@/lib/i18n";
+ 
+ export const Route = createFileRoute("/series/$id")({
+   head: () => ({
+     meta: [
+-      { title: "Série et nouvel épisode — MangaStudio" },
+-      { name: "description", content: "Choisissez vos personnages et lancez un nouvel épisode de votre série." },
+-      { property: "og:title", content: "Série — MangaStudio" },
+-      { property: "og:description", content: "Choisissez vos personnages et lancez un nouvel épisode." },
++      { title: tr("Série et nouvel épisode — MangaStudio", "Series and new episode — MangaStudio") },
++      { name: "description", content: tr("Choisissez vos personnages et lancez un nouvel épisode de votre série.", "Choose your characters and start a new episode of your series.") },
++      { property: "og:title", content: tr("Série — MangaStudio", "Series — MangaStudio") },
++      { property: "og:description", content: tr("Choisissez vos personnages et lancez un nouvel épisode.", "Choose your characters and start a new episode.") },
+       { property: "og:type", content: "website" },
+       { name: "twitter:card", content: "summary" },
+     ],
+@@ -46,8 +47,8 @@ function SeriesPage() {
+     onSuccess: (e) => { qc.invalidateQueries({ queryKey: ["me"] }); qc.invalidateQueries({ queryKey: ["series", id] }); nav({ to: "/episodes/$id", params: { id: String(e.id) } }); },
+   });
+ 
+-  if (isLoading) return <Container><p className="text-encre-douce">Chargement de la série…</p></Container>;
+-  if (error || !s) return <Container><ErrorNote error={error ?? new Error("Série introuvable.")} /></Container>;
++  if (isLoading) return <Container><p className="text-encre-douce">{tr("Chargement de la série…", "Loading the series…")}</p></Container>;
++  if (error || !s) return <Container><ErrorNote error={error ?? new Error(tr("Série introuvable.", "Series not found."))} /></Container>;
+ 
+   const chosen = s.characters.filter((c) => selected.includes(String(c.id)));
+   const sheets = chosen.filter((c) => !c.sheet_url).length;
+@@ -58,16 +59,16 @@ function SeriesPage() {
+ 
+   return (
+     <Container>
+-      <Link to="/" className="mb-4 inline-flex min-h-11 items-center font-bold text-indigo underline">Mes séries</Link>
++      <Link to="/" className="mb-4 inline-flex min-h-11 items-center font-bold text-indigo underline">{tr("Mes séries", "My series")}</Link>
+       <PageTitle sub={s.premise}>{s.title}</PageTitle>
+       <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
+         <div className="flex flex-col gap-8">
+           <section aria-labelledby="persos">
+             <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+-              <h2 id="persos" className="font-display text-[24px] leading-[30px]">Personnages</h2>
+-              <p className="text-[14px] text-encre-douce"><span className="tabular">{selected.length}</span> / <span className="tabular">{maxChars}</span> sélectionnés</p>
++              <h2 id="persos" className="font-display text-[24px] leading-[30px]">{tr("Personnages", "Characters")}</h2>
++              <p className="text-[14px] text-encre-douce"><span className="tabular">{selected.length}</span> / <span className="tabular">{maxChars}</span> {tr("sélectionnés", "selected")}</p>
+             </div>
+-            {s.characters.length === 0 && <p className="mb-4 text-encre-douce">Ajoutez au moins un personnage pour lancer un épisode.</p>}
++            {s.characters.length === 0 && <p className="mb-4 text-encre-douce">{tr("Ajoutez au moins un personnage pour lancer un épisode.", "Add at least one character to start an episode.")}</p>}
+             <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+               {s.characters.map((c) => {
+                 const cid = String(c.id); const on = selected.includes(cid);
+@@ -79,14 +80,14 @@ function SeriesPage() {
+                       {c.sheet_url ? <img src={c.sheet_url} alt="" className="aspect-[3/2] w-full border-2 border-encre bg-blanc object-cover" /> : <div className="trame aspect-[3/2] w-full border-2 border-encre" aria-hidden />}
+                       <span className="mt-2 font-bold">{c.name}</span>
+                       <span className="text-[14px] leading-5 text-encre-douce">{c.role}</span>
+-                      {!c.sheet_url && <Pill tone="soleil" className="mt-2 self-start text-[12px]">Fiche à dessiner · 1 crédit</Pill>}
++                      {!c.sheet_url && <Pill tone="soleil" className="mt-2 self-start text-[12px]">{tr("Fiche à dessiner · 1 crédit", "Sheet to draw · 1 credit")}</Pill>}
+                       <span className={cn("mt-2 inline-flex items-center gap-1 text-[13px] font-bold", on ? "text-vermillon" : "text-encre-douce")}>
+-                        {on ? <><Check size={16} strokeWidth={2} aria-hidden />Sélectionné</> : "Non sélectionné"}
++                        {on ? <><Check size={16} strokeWidth={2} aria-hidden />{tr("Sélectionné", "Selected")}</> : tr("Non sélectionné", "Not selected")}
+                       </span>
+                     </label>
+                     {!c.sheet_url && (
+                       <button type="button" onClick={() => setEditing(cid)} className="mt-2 inline-flex min-h-11 items-center gap-1 text-[14px] font-bold text-indigo underline">
+-                        <Pencil size={14} strokeWidth={2.5} aria-hidden />Modifier {c.name}
++                        <Pencil size={14} strokeWidth={2.5} aria-hidden />{tr("Modifier", "Edit")} {c.name}
+                       </button>
+                     )}
+                   </li>
+@@ -100,16 +101,16 @@ function SeriesPage() {
+           </section>
+ 
+           <section aria-labelledby="eps">
+-            <h2 id="eps" className="mb-4 font-display text-[24px] leading-[30px]">Épisodes</h2>
+-            {s.episodes.length === 0 ? <p className="text-encre-douce">Aucun épisode pour l'instant.</p> : (
++            <h2 id="eps" className="mb-4 font-display text-[24px] leading-[30px]">{tr("Épisodes", "Episodes")}</h2>
++            {s.episodes.length === 0 ? <p className="text-encre-douce">{tr("Aucun épisode pour l'instant.", "No episodes yet.")}</p> : (
+               <ul className="flex flex-col gap-3">
+                 {s.episodes.map((e) => (
+                   <li key={e.id}>
+                     <Link to="/episodes/$id" params={{ id: String(e.id) }} className="flex min-h-14 flex-wrap items-center gap-3 rounded-[8px] border-2 border-encre bg-bulle px-4 py-2 shadow-ink hover:translate-x-[2px] hover:translate-y-[2px]">
+                       <span className="tabular font-bold">n° {e.number}</span>
+-                      <span className="flex-1 font-bold">{e.title || `Épisode ${e.number}`}</span>
++                      <span className="flex-1 font-bold">{e.title || tr(`Épisode ${e.number}`, `Episode ${e.number}`)}</span>
+                       <span className="tabular text-[14px] text-encre-douce">{e.page_count} p.</span>
+-                      <Pill tone={statusTone(e.status)}>{STATUS_LABEL[e.status] ?? e.status}</Pill>
++                      <Pill tone={statusTone(e.status)}>{statusLabel(e.status)}</Pill>
+                     </Link>
+                   </li>
+                 ))}
+@@ -119,34 +120,34 @@ function SeriesPage() {
+         </div>
+ 
+         <Card featured className="flex h-fit flex-col gap-6 lg:sticky lg:top-6">
+-          <h2 className="font-display text-[24px] leading-[30px]">Nouvel épisode</h2>
+-          <Field label="Nombre de pages" htmlFor="pages" hint={<p className="flex justify-between text-[12px] text-encre-douce"><span className="tabular">4</span><span className="tabular">{maxPages}</span></p>}>
++          <h2 className="font-display text-[24px] leading-[30px]">{tr("Nouvel épisode", "New episode")}</h2>
++          <Field label={tr("Nombre de pages", "Number of pages")} htmlFor="pages" hint={<p className="flex justify-between text-[12px] text-encre-douce"><span className="tabular">4</span><span className="tabular">{maxPages}</span></p>}>
+             <div className="flex items-center gap-3">
+               <input id="pages" type="range" min={4} max={maxPages} value={pages} onChange={(e) => setPages(+e.target.value)} className="h-11 flex-1 accent-vermillon" />
+               <span className="tabular w-10 text-right text-[20px] font-bold">{pages}</span>
+             </div>
+           </Field>
+-          <Field label="Orientation (facultatif)" htmlFor="dir">
+-            <Textarea id="dir" maxLength={800} value={direction} onChange={(e) => setDirection(e.target.value)} placeholder="Ce que vous souhaitez voir dans cet épisode…" />
++          <Field label={tr("Orientation (facultatif)", "Direction (optional)")} htmlFor="dir">
++            <Textarea id="dir" maxLength={800} value={direction} onChange={(e) => setDirection(e.target.value)} placeholder={tr("Ce que vous souhaitez voir dans cet épisode…", "What you'd like to see in this episode…")} />
+           </Field>
+           <div className="rounded-[8px] border-2 border-encre bg-papier p-4">
+-            <p className="label-caps mb-3">Réserve de crédits</p>
++            <p className="label-caps mb-3">{tr("Réserve de crédits", "Credits reserved")}</p>
+             <table className="w-full text-[14px] leading-5">
+               <tbody>
+-                <tr><td className="py-1">Pages</td><td className="tabular text-right">{pages}</td></tr>
+-                <tr><td className="py-1">Fiches à dessiner</td><td className="tabular text-right">{sheets}</td></tr>
+-                <tr><td className="py-1">Couverture</td><td className="tabular text-right">{cover}</td></tr>
++                <tr><td className="py-1">{tr("Pages", "Pages")}</td><td className="tabular text-right">{pages}</td></tr>
++                <tr><td className="py-1">{tr("Fiches à dessiner", "Sheets to draw")}</td><td className="tabular text-right">{sheets}</td></tr>
++                <tr><td className="py-1">{tr("Couverture", "Cover")}</td><td className="tabular text-right">{cover}</td></tr>
+                 <tr className="border-t-2 border-encre font-bold"><td className="pt-2">Total</td><td className="tabular pt-2 text-right text-[18px]">{total}</td></tr>
+               </tbody>
+             </table>
+-            {me && <p className="mt-2 text-[13px] text-encre-douce">Solde : <span className="tabular">{me.credits}</span> crédits</p>}
+-            {notEnough && <p className="mt-2 text-[14px] font-bold text-alerte">Crédits insuffisants. <Link to="/abonnements" className="text-indigo underline">Recharger</Link></p>}
++            {me && <p className="mt-2 text-[13px] text-encre-douce">{tr("Solde : ", "Balance: ")}<span className="tabular">{me.credits}</span> {tr("crédits", "credits")}</p>}
++            {notEnough && <p className="mt-2 text-[14px] font-bold text-alerte">{tr("Crédits insuffisants. ", "Not enough credits. ")}<Link to="/abonnements" className="text-indigo underline">{tr("Recharger", "Top up")}</Link></p>}
+           </div>
+           <ErrorNote error={launch.error} />
+           <Button variant="primary" disabled={selected.length === 0 || launch.isPending} onClick={() => launch.mutate()}>
+-            <Play size={20} strokeWidth={2} aria-hidden />{launch.isPending ? "Lancement…" : "Lancer l'épisode"}
++            <Play size={20} strokeWidth={2} aria-hidden />{launch.isPending ? tr("Lancement…", "Starting…") : tr("Lancer l'épisode", "Start the episode")}
+           </Button>
+-          {selected.length === 0 && <p className="-mt-3 text-[13px] text-encre-douce">Cochez au moins un personnage.</p>}
++          {selected.length === 0 && <p className="-mt-3 text-[13px] text-encre-douce">{tr("Cochez au moins un personnage.", "Select at least one character.")}</p>}
+         </Card>
+       </div>
+       <SupprimerSerie s={s} />
+@@ -165,35 +166,35 @@ function AddCharacter({ seriesId }: { seriesId: string }) {
+     onSuccess: () => { qc.invalidateQueries({ queryKey: ["series", seriesId] }); setOpen(false); setName(""); setRole(""); setDescription(""); setPhoto(null); setConsent(false); },
+   });
+   const code = (m.error as { code?: string } | null)?.code;
+-  if (!open) return <Button className="mt-6" onClick={() => setOpen(true)}><UserPlus size={20} strokeWidth={2} aria-hidden />Ajouter un personnage</Button>;
++  if (!open) return <Button className="mt-6" onClick={() => setOpen(true)}><UserPlus size={20} strokeWidth={2} aria-hidden />{tr("Ajouter un personnage", "Add a character")}</Button>;
+   return (
+     <Card className="mt-6">
+-      <h3 className="font-display text-[24px] leading-[30px]">Ajouter un personnage</h3>
++      <h3 className="font-display text-[24px] leading-[30px]">{tr("Ajouter un personnage", "Add a character")}</h3>
+       <form className="mt-4 grid gap-4 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); m.mutate(); }}>
+-        <Field label="Nom" htmlFor="c-name"><Input id="c-name" required maxLength={60} value={name} onChange={(e) => setName(e.target.value)} /></Field>
+-        <Field label="Rôle" htmlFor="c-role"><Input id="c-role" maxLength={120} value={role} onChange={(e) => setRole(e.target.value)} placeholder="Héroïne, mentor, rival…" /></Field>
+-        <div className="sm:col-span-2"><Field label="Description" htmlFor="c-desc" hint={code === "blocked_terms" ? <ErrorNote inline error={m.error} /> : undefined}>
+-          <Textarea id="c-desc" maxLength={600} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Apparence, tenue, caractère…" />
++        <Field label={tr("Nom", "Name")} htmlFor="c-name"><Input id="c-name" required maxLength={60} value={name} onChange={(e) => setName(e.target.value)} /></Field>
++        <Field label={tr("Rôle", "Role")} htmlFor="c-role"><Input id="c-role" maxLength={120} value={role} onChange={(e) => setRole(e.target.value)} placeholder={tr("Héroïne, mentor, rival…", "Heroine, mentor, rival…")} /></Field>
++        <div className="sm:col-span-2"><Field label={tr("Description", "Description")} htmlFor="c-desc" hint={code === "blocked_terms" ? <ErrorNote inline error={m.error} /> : undefined}>
++          <Textarea id="c-desc" maxLength={600} value={description} onChange={(e) => setDescription(e.target.value)} placeholder={tr("Apparence, tenue, caractère…", "Looks, outfit, personality…")} />
+         </Field></div>
+-        <div className="sm:col-span-2"><Field label="Photo (facultatif)" htmlFor="c-photo">
++        <div className="sm:col-span-2"><Field label={tr("Photo (facultatif)", "Photo (optional)")} htmlFor="c-photo">
+           <input id="c-photo" type="file" accept="image/jpeg,image/png,image/webp" className="min-h-11 text-[14px]" onChange={async (e) => {
+             const f = e.target.files?.[0]; setPhotoError(false);
+             if (!f) { setPhoto(null); return; }
+             // Réduite avant l'envoi : une photo de téléphone dépasse la taille acceptée par l'API.
+             try { setPhoto(await photoToDataUrl(f)); } catch { setPhoto(null); setPhotoError(true); }
+           }} />
+-          {photoError && <p role="alert" className="text-[14px] font-medium text-alerte">Cette image est illisible. Choisissez un fichier JPEG, PNG ou WebP.</p>}
++          {photoError && <p role="alert" className="text-[14px] font-medium text-alerte">{tr("Cette image est illisible. Choisissez un fichier JPEG, PNG ou WebP.", "This image can't be read. Choose a JPEG, PNG or WebP file.")}</p>}
+         </Field></div>
+         {photo && (
+           <label className="flex min-h-11 items-start gap-3 sm:col-span-2">
+             <input type="checkbox" required checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-1 size-5 accent-vermillon" />
+-            <span>J'ai l'accord de la personne sur cette photo</span>
++            <span>{tr("J'ai l'accord de la personne sur cette photo", "I have the consent of the person in this photo")}</span>
+           </label>
+         )}
+         {code !== "blocked_terms" && <div className="sm:col-span-2"><ErrorNote error={m.error} /></div>}
+         <div className="flex flex-wrap gap-3 sm:col-span-2">
+-          <Button type="submit" disabled={m.isPending || (!!photo && !consent)}>{m.isPending ? "Ajout…" : "Ajouter"}</Button>
+-          <Button type="button" onClick={() => setOpen(false)}>Annuler</Button>
++          <Button type="submit" disabled={m.isPending || (!!photo && !consent)}>{m.isPending ? tr("Ajout…", "Adding…") : tr("Ajouter", "Add")}</Button>
++          <Button type="button" onClick={() => setOpen(false)}>{tr("Annuler", "Cancel")}</Button>
+         </div>
+       </form>
+     </Card>
+@@ -210,20 +211,20 @@ function EditCharacter({ seriesId, c, onClose }: { seriesId: string; c: Characte
+   });
+   return (
+     <Card className="mt-6">
+-      <h3 className="font-display text-[24px] leading-[30px]">Modifier {c.name}</h3>
++      <h3 className="font-display text-[24px] leading-[30px]">{tr("Modifier", "Edit")} {c.name}</h3>
+       <p className="mt-1 text-[14px] leading-5 text-encre-douce">
+-        Inventez un personnage à vous : un nom et une apparence qui ne copient pas un héros connu (le dessinateur IA refuse les personnages protégés).
++        {tr("Inventez un personnage à vous : un nom et une apparence qui ne copient pas un héros connu (le dessinateur IA refuse les personnages protégés).", "Invent your own character: a name and a look that don't copy a well-known hero (the AI artist refuses copyrighted characters).")}
+       </p>
+       <form className="mt-4 grid gap-4 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); m.mutate(); }}>
+-        <Field label="Nom" htmlFor="e-name"><Input id="e-name" required maxLength={60} value={name} onChange={(e) => setName(e.target.value)} /></Field>
+-        <Field label="Rôle" htmlFor="e-role"><Input id="e-role" maxLength={120} value={role} onChange={(e) => setRole(e.target.value)} /></Field>
++        <Field label={tr("Nom", "Name")} htmlFor="e-name"><Input id="e-name" required maxLength={60} value={name} onChange={(e) => setName(e.target.value)} /></Field>
++        <Field label={tr("Rôle", "Role")} htmlFor="e-role"><Input id="e-role" maxLength={120} value={role} onChange={(e) => setRole(e.target.value)} /></Field>
+         <div className="sm:col-span-2"><Field label="Description" htmlFor="e-desc">
+-          <Textarea id="e-desc" maxLength={600} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Apparence, tenue, caractère…" />
++          <Textarea id="e-desc" maxLength={600} value={description} onChange={(e) => setDescription(e.target.value)} placeholder={tr("Apparence, tenue, caractère…", "Looks, outfit, personality…")} />
+         </Field></div>
+         <div className="sm:col-span-2"><ErrorNote error={m.error} /></div>
+         <div className="flex flex-wrap gap-3 sm:col-span-2">
+-          <Button type="submit" variant="primary" disabled={m.isPending}>{m.isPending ? "Enregistrement…" : "Enregistrer"}</Button>
+-          <Button type="button" onClick={onClose}>Annuler</Button>
++          <Button type="submit" variant="primary" disabled={m.isPending}>{m.isPending ? tr("Enregistrement…", "Saving…") : tr("Enregistrer", "Save")}</Button>
++          <Button type="button" onClick={onClose}>{tr("Annuler", "Cancel")}</Button>
+         </div>
+       </form>
+     </Card>
+@@ -244,32 +245,33 @@ function SupprimerSerie({ s }: { s: SeriesDetail }) {
+   const n = s.episodes.length;
+   return (
+     <section className="mt-16 border-t-2 border-encre pt-8" aria-labelledby="danger">
+-      <h2 id="danger" className="font-display text-[22px] leading-[28px]">Supprimer cette histoire</h2>
++      <h2 id="danger" className="font-display text-[22px] leading-[28px]">{tr("Supprimer cette histoire", "Delete this story")}</h2>
+       {!ouvert ? (
+         <>
+-          <p className="mt-2 max-w-2xl text-encre-douce">Efface la série, ses personnages et tous ses épisodes, pour de bon.</p>
+-          <Button className="mt-4" onClick={() => setOuvert(true)} disabled={enCours}>Supprimer l'histoire…</Button>
+-          {enCours && <p className="mt-2 text-[13px] text-encre-douce">Impossible pendant qu'un épisode est en cours de création.</p>}
++          <p className="mt-2 max-w-2xl text-encre-douce">{tr("Efface la série, ses personnages et tous ses épisodes, pour de bon.", "Erases the series, its characters and all its episodes, for good.")}</p>
++          <Button className="mt-4" onClick={() => setOuvert(true)} disabled={enCours}>{tr("Supprimer l'histoire…", "Delete the story…")}</Button>
++          {enCours && <p className="mt-2 text-[13px] text-encre-douce">{tr("Impossible pendant qu'un épisode est en cours de création.", "Not possible while an episode is being created.")}</p>}
+         </>
+       ) : (
+         <form className="mt-4 max-w-2xl rounded-[4px] border-2 border-alerte bg-bulle p-5" onSubmit={(e) => { e.preventDefault(); m.mutate(); }}>
+-          <p className="font-bold text-alerte">Cette action est irréversible.</p>
++          <p className="font-bold text-alerte">{tr("Cette action est irréversible.", "This can't be undone.")}</p>
+           <ul className="mt-2 list-disc space-y-1 pl-6">
+-            <li>{s.characters.length} personnage{s.characters.length > 1 ? "s" : ""} et {n} épisode{n > 1 ? "s" : ""} seront effacés, avec toutes leurs pages.</li>
+-            <li>Les chapitres publiés disparaissent de la galerie, avec leurs « j'aime », et les liens de partage ne marcheront plus.</li>
+-            <li>Les crédits déjà utilisés ne sont pas rendus ; ceux encore réservés le sont.</li>
++            <li>{tr(`${s.characters.length} personnage${s.characters.length > 1 ? "s" : ""} et ${n} épisode${n > 1 ? "s" : ""} seront effacés, avec toutes leurs pages.`,
++              `${s.characters.length} character${s.characters.length === 1 ? "" : "s"} and ${n} episode${n === 1 ? "" : "s"} will be erased, with all their pages.`)}</li>
++            <li>{tr("Les chapitres publiés disparaissent de la galerie, avec leurs « j'aime », et les liens de partage ne marcheront plus.", "Published chapters disappear from the gallery, with their likes, and share links will stop working.")}</li>
++            <li>{tr("Les crédits déjà utilisés ne sont pas rendus ; ceux encore réservés le sont.", "Credits already used are not refunded; credits still reserved are.")}</li>
+           </ul>
+           <div className="mt-5">
+-            <Field label="Pour confirmer, tapez SUPPRIMER" htmlFor="confirm-del">
++            <Field label={tr("Pour confirmer, tapez SUPPRIMER", "To confirm, type DELETE")} htmlFor="confirm-del">
+               <Input id="confirm-del" autoComplete="off" value={mot} onChange={(e) => setMot(e.target.value)} />
+             </Field>
+           </div>
+           <ErrorNote error={m.error} />
+           <div className="mt-4 flex flex-wrap gap-3">
+-            <Button type="submit" variant="primary" disabled={mot.trim().toUpperCase() !== "SUPPRIMER" || m.isPending}>
+-              {m.isPending ? "Suppression…" : "Supprimer définitivement"}
++            <Button type="submit" variant="primary" disabled={mot.trim().toUpperCase() !== tr("SUPPRIMER", "DELETE") || m.isPending}>
++              {m.isPending ? tr("Suppression…", "Deleting…") : tr("Supprimer définitivement", "Delete permanently")}
+             </Button>
+-            <Button type="button" onClick={() => { setOuvert(false); setMot(""); }}>Annuler</Button>
++            <Button type="button" onClick={() => { setOuvert(false); setMot(""); }}>{tr("Annuler", "Cancel")}</Button>
+           </div>
+         </form>
+       )}
+diff --git a/frontend/src/routes/soutenir.tsx b/frontend/src/routes/soutenir.tsx
+index aba0ae4..ce8928c 100644
+--- a/frontend/src/routes/soutenir.tsx
++++ b/frontend/src/routes/soutenir.tsx
+@@ -6,12 +6,13 @@ import { useToken } from "@/lib/session";
+ import { Button, Card, Container, Field, Input, Onomatopee, PageTitle } from "@/components/ink";
+ import { fcfa, MobileMoneyCheckout } from "@/components/MobileMoneyCheckout";
+ import { cn } from "@/lib/utils";
++import { tr } from "@/lib/i18n";
+ 
+ export const Route = createFileRoute("/soutenir")({
+   head: () => ({
+     meta: [
+-      { title: "Nous soutenir — MangaStudio" },
+-      { name: "description", content: "Aidez MangaStudio à payer ses serveurs et ses modèles de dessin : faites un don par mobile money." },
++      { title: tr("Nous soutenir — MangaStudio", "Support us — MangaStudio") },
++      { name: "description", content: tr("Aidez MangaStudio à payer ses serveurs et ses modèles de dessin : faites un don par mobile money.", "Help MangaStudio pay for its servers and drawing models: donate by mobile money.") },
+     ],
+   }),
+   component: SoutenirPage,
+@@ -35,30 +36,30 @@ function SoutenirPage() {
+ 
+   return (
+     <Container className="max-w-[900px]">
+-      <PageTitle sub="MangaStudio est un projet indépendant. Chaque épisode demande des serveurs et des modèles d'intelligence artificielle qui coûtent cher : vos dons nous aident à les payer, à garder des prix accessibles et une offre gratuite.">
+-        Nous soutenir
++      <PageTitle sub={tr("MangaStudio est un projet indépendant. Chaque épisode demande des serveurs et des modèles d'intelligence artificielle qui coûtent cher : vos dons nous aident à les payer, à garder des prix accessibles et une offre gratuite.", "MangaStudio is an independent project. Every episode needs servers and AI models that are expensive: your donations help us pay for them, keep prices affordable and keep a free plan.")}>
++        {tr("Nous soutenir", "Support us")}
+       </PageTitle>
+ 
+       <div className="grid gap-4 sm:grid-cols-2">
+         <Card className="flex gap-4">
+           <Server size={28} strokeWidth={2} aria-hidden className="shrink-0 text-indigo" />
+-          <p><b>Les serveurs</b> qui hébergent la plateforme, vos séries et vos pages, jour et nuit.</p>
++          <p><b>{tr("Les serveurs", "The servers")}</b>{tr(" qui hébergent la plateforme, vos séries et vos pages, jour et nuit.", " that host the platform, your series and your pages, day and night.")}</p>
+         </Card>
+         <Card className="flex gap-4">
+           <Heart size={28} strokeWidth={2} aria-hidden className="shrink-0 text-vermillon" />
+-          <p><b>Les modèles de dessin</b> : chaque page dessinée a un coût, que vos dons aident à couvrir.</p>
++          <p><b>{tr("Les modèles de dessin", "The drawing models")}</b>{tr(" : chaque page dessinée a un coût, que vos dons aident à couvrir.", ": every page drawn has a cost, which your donations help cover.")}</p>
+         </Card>
+       </div>
+ 
+       <section className="mt-10">
+-        <h2 className="mb-4 font-display text-[24px] leading-[30px]">Faire un don par mobile money</h2>
++        <h2 className="mb-4 font-display text-[24px] leading-[30px]">{tr("Faire un don par mobile money", "Donate by mobile money")}</h2>
+         {don ? (
+-          <MobileMoneyCheckout product={{ id: "don", label: "Don à MangaStudio", price: don }} onClose={() => setDon(null)}
+-            paidMessage="Merci infiniment pour votre don ! Il nous aide à faire tourner la plateforme." />
++          <MobileMoneyCheckout product={{ id: "don", label: tr("Don à MangaStudio", "Donation to MangaStudio"), price: don }} onClose={() => setDon(null)}
++            paidMessage={tr("Merci infiniment pour votre don ! Il nous aide à faire tourner la plateforme.", "Thank you so much for your donation! It helps us keep the platform running.")} />
+         ) : (
+           <Card featured className="relative">
+-            <Onomatopee className="absolute -top-5 right-4">MERCI !</Onomatopee>
+-            <p className="label-caps mb-3">Choisissez un montant</p>
++            <Onomatopee className="absolute -top-5 right-4">{tr("MERCI !", "THANKS!")}</Onomatopee>
++            <p className="label-caps mb-3">{tr("Choisissez un montant", "Choose an amount")}</p>
+             <div className="flex flex-wrap gap-3">
+               {MONTANTS.map((m) => (
+                 <button key={m} type="button" aria-pressed={choix === m} onClick={() => { setChoix(m); setLibre(""); }}
+@@ -68,37 +69,37 @@ function SoutenirPage() {
+               ))}
+             </div>
+             <div className="mt-4 max-w-[260px]">
+-              <Field label="Autre montant (FCFA)" htmlFor="libre">
+-                <Input id="libre" type="number" inputMode="numeric" min={MIN} max={MAX} step={100} value={libre} placeholder="ex. 3000"
++              <Field label={tr("Autre montant (FCFA)", "Other amount (FCFA)")} htmlFor="libre">
++                <Input id="libre" type="number" inputMode="numeric" min={MIN} max={MAX} step={100} value={libre} placeholder={tr("ex. 3000", "e.g. 3000")}
+                   onChange={(e) => { setLibre(e.target.value); setChoix(null); }} />
+               </Field>
+             </div>
+-            {!valide && montant > 0 && <p className="mt-2 text-[14px] text-alerte">Entre {fcfa(MIN)} et {fcfa(MAX)}.</p>}
++            {!valide && montant > 0 && <p className="mt-2 text-[14px] text-alerte">{tr(`Entre ${fcfa(MIN)} et ${fcfa(MAX)}.`, `Between ${fcfa(MIN)} and ${fcfa(MAX)}.`)}</p>}
+             <div className="mt-6 flex flex-wrap items-center gap-4">
+               {token ? (
+-                <Button variant="primary" disabled={!valide} onClick={() => setDon(montant)}>Donner {valide ? fcfa(montant) : ""}</Button>
++                <Button variant="primary" disabled={!valide} onClick={() => setDon(montant)}>{tr("Donner", "Donate")} {valide ? fcfa(montant) : ""}</Button>
+               ) : (
+                 <>
+-                  <Link to="/connexion" className="inline-flex min-h-12 items-center rounded-[4px] border-2 border-encre bg-vermillon px-6 font-bold text-sur-vermillon shadow-ink">Me connecter pour donner</Link>
+-                  <span className="text-[14px] text-encre-douce">ou <Link to="/inscription" className="font-bold underline">créez un compte gratuit</Link>.</span>
++                  <Link to="/connexion" className="inline-flex min-h-12 items-center rounded-[4px] border-2 border-encre bg-vermillon px-6 font-bold text-sur-vermillon shadow-ink">{tr("Me connecter pour donner", "Sign in to donate")}</Link>
++                  <span className="text-[14px] text-encre-douce">{tr("ou ", "or ")}<Link to="/inscription" className="font-bold underline">{tr("créez un compte gratuit", "create a free account")}</Link>.</span>
+                 </>
+               )}
+             </div>
+-            <p className="mt-4 text-[14px] leading-5 text-encre-douce">Vous validez le don sur votre téléphone (MTN ou Orange). Un don ne donne pas de crédits.</p>
++            <p className="mt-4 text-[14px] leading-5 text-encre-douce">{tr("Vous validez le don sur votre téléphone (MTN ou Orange). Un don ne donne pas de crédits.", "You confirm the donation on your phone (MTN or Orange). A donation doesn't give credits.")}</p>
+           </Card>
+         )}
+       </section>
+ 
+       {avecDirects && (
+         <section className="mt-10">
+-          <h2 className="mb-2 font-display text-[24px] leading-[30px]">Sans compte : dépôt direct</h2>
+-          <p className="mb-4 text-encre-douce">Envoyez votre don directement depuis votre téléphone. Ecrivez-nous avant d'envoyer vos dons par cette voie.</p>
++          <h2 className="mb-2 font-display text-[24px] leading-[30px]">{tr("Sans compte : dépôt direct", "Without an account: direct transfer")}</h2>
++          <p className="mb-4 text-encre-douce">{tr("Envoyez votre don directement depuis votre téléphone. Vérifiez le nom du destinataire avant de valider.", "Send your donation directly from your phone. Check the recipient's name before confirming.")}</p>
+           <div className="grid gap-4 sm:grid-cols-2">
+             {directs.filter(([, d]) => d.numero).map(([nom, d]) => (
+               <Card key={nom}>
+                 <p className="label-caps">{nom}</p>
+                 <p className="tabular mt-1 text-[24px] font-bold">{d.numero}</p>
+-                {d.titulaire && <p className="text-encre-douce">au nom de <b className="text-encre">{d.titulaire}</b></p>}
++                {d.titulaire && <p className="text-encre-douce">{tr("au nom de ", "in the name of ")}<b className="text-encre">{d.titulaire}</b></p>}
+               </Card>
+             ))}
+           </div>
+diff --git a/frontend/src/routes/styles.tsx b/frontend/src/routes/styles.tsx
+index f1a6133..11354e4 100644
+--- a/frontend/src/routes/styles.tsx
++++ b/frontend/src/routes/styles.tsx
+@@ -1,5 +1,6 @@
+ import { createFileRoute, Link } from "@tanstack/react-router";
+-import { STYLES_MANGA } from "@/content/styles";
++import { stylesManga } from "@/content/styles";
++import { tr } from "@/lib/i18n";
+ import { useToken } from "@/lib/session";
+ import { Container, PageTitle, Pill } from "@/components/ink";
+ import { VignetteStyle } from "@/components/StyleManga";
+@@ -8,8 +9,8 @@ import { btnClass } from "@/components/ink";
+ export const Route = createFileRoute("/styles")({
+   head: () => ({
+     meta: [
+-      { title: "Les styles de manga — MangaStudio" },
+-      { name: "description", content: "Shōnen, shōjo, seinen, kodomo et afro-manga : à quoi ressemble chaque style et pour quelles histoires le choisir." },
++      { title: tr("Les styles de manga — MangaStudio", "Manga styles — MangaStudio") },
++      { name: "description", content: tr("Shōnen, shōjo, seinen, kodomo et afro-manga : à quoi ressemble chaque style et pour quelles histoires le choisir.", "Shōnen, shōjo, seinen, kodomo and afro-manga: what each style looks like and which stories it suits.") },
+     ],
+   }),
+   component: StylesPage,
+@@ -19,28 +20,28 @@ function StylesPage() {
+   const token = useToken();
+   return (
+     <Container>
+-      <PageTitle sub="Le style décide du trait, des visages, des cadrages et de l'ambiance de chaque page. Les exemples ci-dessous ont été dessinés par MangaStudio.">
+-        Quel style pour votre manga ?
++      <PageTitle sub={tr("Le style décide du trait, des visages, des cadrages et de l'ambiance de chaque page. Les exemples ci-dessous ont été dessinés par MangaStudio.", "The style sets the line work, faces, framing and mood of every page. The examples below were drawn by MangaStudio.")}>
++        {tr("Quel style pour votre manga ?", "Which style for your manga?")}
+       </PageTitle>
+       <ul className="flex flex-col gap-10">
+-        {STYLES_MANGA.map((s, i) => (
++        {stylesManga().map((s, i) => (
+           <li key={s.id} id={s.id} className="grid scroll-mt-24 items-start gap-6 rounded-[8px] border-2 border-encre bg-bulle p-5 shadow-ink md:grid-cols-[280px_1fr] md:p-6">
+             <VignetteStyle style={s} legende className={`aspect-[2/3] w-full max-w-[280px] ${i % 2 ? "md:rotate-1" : "md:-rotate-1"}`} />
+             <div>
+               <div className="flex flex-wrap items-center gap-3">
+                 <h2 className="font-display text-[32px] leading-[38px]">{s.nom}</h2>
+-                {s.nouveau && <Pill tone="soleil">Nouveau</Pill>}
++                {s.nouveau && <Pill tone="soleil">{tr("Nouveau", "New")}</Pill>}
+               </div>
+               <p className="mt-1 italic text-encre-douce">{s.origine}</p>
+               <p className="mt-4 text-[18px] font-bold leading-7">{s.accroche}</p>
+               <p className="mt-2 leading-7">{s.description}</p>
+-              <p className="label-caps mt-5 mb-2">Idéal pour</p>
++              <p className="label-caps mt-5 mb-2">{tr("Idéal pour", "Great for")}</p>
+               <ul className="flex flex-wrap gap-2">
+                 {s.ideal.map((x) => <li key={x} className="rounded-full border-2 border-encre bg-papier px-3 py-0.5 text-[14px] font-bold">{x}</li>)}
+               </ul>
+-              {s.reperes && <p className="mt-4 text-[14px] text-encre-douce">Pour situer : {s.reperes}.</p>}
++              {s.reperes && <p className="mt-4 text-[14px] text-encre-douce">{tr("Pour situer : ", "For reference: ")}{s.reperes}.</p>}
+               <Link to={token ? "/" : "/inscription"} search={token ? { style: s.id } : undefined} className={`${btnClass("primary")} mt-6`}>
+-                Créer une série en {s.nom}
++                {tr("Créer une série en ", "Create a series in ")}{s.nom}
+               </Link>
+             </div>
+           </li>
+diff --git a/frontend/src/routes/verifier.tsx b/frontend/src/routes/verifier.tsx
+index 3bcd10c..84be832 100644
+--- a/frontend/src/routes/verifier.tsx
++++ b/frontend/src/routes/verifier.tsx
+@@ -5,9 +5,10 @@ import { MailCheck } from "lucide-react";
+ import { api, tokenStore } from "@/lib/api";
+ import { useMe } from "@/lib/session";
+ import { Button, Card, ErrorNote, Field, Input, RequireAuth } from "@/components/ink";
++import { tr } from "@/lib/i18n";
+ 
+ export const Route = createFileRoute("/verifier")({
+-  head: () => ({ meta: [{ title: "Confirmer votre adresse — MangaStudio" }, { name: "robots", content: "noindex" }] }),
++  head: () => ({ meta: [{ title: tr("Confirmer votre adresse — MangaStudio", "Confirm your email — MangaStudio") }, { name: "robots", content: "noindex" }] }),
+   component: () => <RequireAuth allowUnverified><VerifierPage /></RequireAuth>,
+ });
+ 
+@@ -41,27 +42,27 @@ function VerifierPage() {
+     <main className="flex justify-center px-4 py-12 sm:py-16">
+       <Card featured className="w-full max-w-[460px]">
+         <MailCheck size={40} strokeWidth={2} aria-hidden className="text-vermillon" />
+-        <h1 className="mt-3 font-display text-[30px] leading-[36px]">Confirmez votre adresse</h1>
++        <h1 className="mt-3 font-display text-[30px] leading-[36px]">{tr("Confirmez votre adresse", "Confirm your email address")}</h1>
+         <p className="mt-2 text-encre-douce">
+-          Nous avons envoyé un code à 6 chiffres à <b className="break-all text-encre">{me?.email ?? "votre adresse"}</b>. Pensez à regarder dans les courriers indésirables.
++          {tr("Nous avons envoyé un code à 6 chiffres à ", "We sent a 6-digit code to ")}<b className="break-all text-encre">{me?.email ?? tr("votre adresse", "your address")}</b>{tr(". Pensez à regarder dans les courriers indésirables.", ". Remember to check your spam folder.")}
+         </p>
+         <form className="mt-6 flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); verifier.mutate(); }}>
+-          <Field label="Code reçu" htmlFor="code">
++          <Field label={tr("Code reçu", "Code received")} htmlFor="code">
+             <Input id="code" required inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" maxLength={6} value={code}
+               onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+               className="tabular text-center text-[28px] tracking-[0.4em]" placeholder="······" autoFocus />
+           </Field>
+           <ErrorNote error={verifier.error ?? renvoyer.error} />
+-          {renvoyer.isSuccess && <p role="status" className="font-bold text-succes">Nouveau code envoyé.</p>}
+-          <Button type="submit" variant="primary" disabled={code.length !== 6 || verifier.isPending}>{verifier.isPending ? "Vérification…" : "Confirmer"}</Button>
++          {renvoyer.isSuccess && <p role="status" className="font-bold text-succes">{tr("Nouveau code envoyé.", "New code sent.")}</p>}
++          <Button type="submit" variant="primary" disabled={code.length !== 6 || verifier.isPending}>{verifier.isPending ? tr("Vérification…", "Checking…") : tr("Confirmer", "Confirm")}</Button>
+         </form>
+-        <p className="mt-4 text-[14px] text-encre-douce">Vos crédits offerts sont ajoutés dès que l'adresse est confirmée.</p>
++        <p className="mt-4 text-[14px] text-encre-douce">{tr("Vos crédits offerts sont ajoutés dès que l'adresse est confirmée.", "Your free credits are added as soon as your address is confirmed.")}</p>
+         <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-trait pt-4 text-[14px]">
+           <Button disabled={attente > 0 || renvoyer.isPending} onClick={() => renvoyer.mutate()}>
+-            {attente > 0 ? `Renvoyer le code (${attente} s)` : "Renvoyer le code"}
++            {attente > 0 ? tr(`Renvoyer le code (${attente} s)`, `Resend the code (${attente} s)`) : tr("Renvoyer le code", "Resend the code")}
+           </Button>
+           <button className="min-h-11 font-bold text-indigo underline" onClick={() => { qc.clear(); tokenStore.set(null); nav({ to: "/inscription", replace: true }); }}>
+-            Mauvaise adresse ? Recommencer
++            {tr("Mauvaise adresse ? Recommencer", "Wrong address? Start over")}
+           </button>
+         </div>
+       </Card>
+diff --git a/vps/sauvegarde.sh b/vps/sauvegarde.sh
+index 1689845..ae04b62 100644
+--- a/vps/sauvegarde.sh
++++ b/vps/sauvegarde.sh
+@@ -51,4 +51,4 @@ if ! "${COMPOSE[@]}" run --rm --no-deps -T api tar czf - -C /data storage > "$DI
+ fi
+ find "$DIR" -name 'base-*.dump' -mtime +14 -delete
+ find "$DIR" -name 'images-*.tgz' -mtime +14 -delete
+-echo "$(date '+%F %T') sauvegarde : $DIR/base-$D.dump ($(du -h "$DIR/base-$D.dump" | cut -f1)), $DIR/images-$D.tgz ($(du -h "$DIR/images-$D.tgz" | cut -f1))"
+\ No newline at end of file
++echo "$(date '+%F %T') sauvegarde : $DIR/base-$D.dump ($(du -h "$DIR/base-$D.dump" | cut -f1)), $DIR/images-$D.tgz ($(du -h "$DIR/images-$D.tgz" | cut -f1))"
