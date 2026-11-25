@@ -25,15 +25,20 @@ import { Route as StylesRouteImport } from './routes/styles'
 import { Route as VerifierRouteImport } from './routes/verifier'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminAvisRouteImport } from './routes/admin/avis'
+import { Route as AdminIndicateursRouteImport } from './routes/admin/indicateurs'
 import { Route as AdminJournalRouteImport } from './routes/admin/journal'
 import { Route as AdminModerationRouteImport } from './routes/admin/moderation'
 import { Route as AdminPaiementsRouteImport } from './routes/admin/paiements'
 import { Route as AdminParrainagesRouteImport } from './routes/admin/parrainages'
 import { Route as AdminPublicationsRouteImport } from './routes/admin/publications'
+import { Route as ConcoursIndexRouteImport } from './routes/concours.index'
+import { Route as ConcoursSlugRouteImport } from './routes/concours.$slug'
 import { Route as EpisodesIdRouteImport } from './routes/episodes.$id'
 import { Route as GalerieIndexRouteImport } from './routes/galerie.index'
 import { Route as GalerieIdRouteImport } from './routes/galerie.$id'
 import { Route as SeriesIdRouteImport } from './routes/series.$id'
+import { Route as AdminConcoursIndexRouteImport } from './routes/admin/concours.index'
+import { Route as AdminConcoursIdRouteImport } from './routes/admin/concours.$id'
 import { Route as AdminEpisodesIndexRouteImport } from './routes/admin/episodes.index'
 import { Route as AdminEpisodesIdRouteImport } from './routes/admin/episodes.$id'
 import { Route as AdminUtilisateursIndexRouteImport } from './routes/admin/utilisateurs.index'
@@ -119,6 +124,11 @@ const AdminAvisRoute = AdminAvisRouteImport.update({
   path: '/avis',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminIndicateursRoute = AdminIndicateursRouteImport.update({
+  id: '/indicateurs',
+  path: '/indicateurs',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminJournalRoute = AdminJournalRouteImport.update({
   id: '/journal',
   path: '/journal',
@@ -144,6 +154,16 @@ const AdminPublicationsRoute = AdminPublicationsRouteImport.update({
   path: '/publications',
   getParentRoute: () => AdminRoute,
 } as any)
+const ConcoursIndexRoute = ConcoursIndexRouteImport.update({
+  id: '/concours/',
+  path: '/concours/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConcoursSlugRoute = ConcoursSlugRouteImport.update({
+  id: '/concours/$slug',
+  path: '/concours/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const EpisodesIdRoute = EpisodesIdRouteImport.update({
   id: '/episodes/$id',
   path: '/episodes/$id',
@@ -163,6 +183,16 @@ const SeriesIdRoute = SeriesIdRouteImport.update({
   id: '/series/$id',
   path: '/series/$id',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AdminConcoursIndexRoute = AdminConcoursIndexRouteImport.update({
+  id: '/concours/',
+  path: '/concours/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminConcoursIdRoute = AdminConcoursIdRouteImport.update({
+  id: '/concours/$id',
+  path: '/concours/$id',
+  getParentRoute: () => AdminRoute,
 } as any)
 const AdminEpisodesIndexRoute = AdminEpisodesIndexRouteImport.update({
   id: '/episodes/',
@@ -201,18 +231,23 @@ export interface FileRoutesByFullPath {
   '/styles': typeof StylesRoute
   '/verifier': typeof VerifierRoute
   '/admin/avis': typeof AdminAvisRoute
+  '/admin/indicateurs': typeof AdminIndicateursRoute
   '/admin/journal': typeof AdminJournalRoute
   '/admin/moderation': typeof AdminModerationRoute
   '/admin/paiements': typeof AdminPaiementsRoute
   '/admin/parrainages': typeof AdminParrainagesRoute
   '/admin/publications': typeof AdminPublicationsRoute
+  '/concours/$slug': typeof ConcoursSlugRoute
   '/episodes/$id': typeof EpisodesIdRoute
   '/galerie/$id': typeof GalerieIdRoute
   '/series/$id': typeof SeriesIdRoute
   '/admin/': typeof AdminIndexRoute
+  '/concours/': typeof ConcoursIndexRoute
   '/galerie/': typeof GalerieIndexRoute
+  '/admin/concours/$id': typeof AdminConcoursIdRoute
   '/admin/episodes/$id': typeof AdminEpisodesIdRoute
   '/admin/utilisateurs/$id': typeof AdminUtilisateursIdRoute
+  '/admin/concours/': typeof AdminConcoursIndexRoute
   '/admin/episodes/': typeof AdminEpisodesIndexRoute
   '/admin/utilisateurs/': typeof AdminUtilisateursIndexRoute
 }
@@ -231,18 +266,23 @@ export interface FileRoutesByTo {
   '/styles': typeof StylesRoute
   '/verifier': typeof VerifierRoute
   '/admin/avis': typeof AdminAvisRoute
+  '/admin/indicateurs': typeof AdminIndicateursRoute
   '/admin/journal': typeof AdminJournalRoute
   '/admin/moderation': typeof AdminModerationRoute
   '/admin/paiements': typeof AdminPaiementsRoute
   '/admin/parrainages': typeof AdminParrainagesRoute
   '/admin/publications': typeof AdminPublicationsRoute
+  '/concours/$slug': typeof ConcoursSlugRoute
   '/episodes/$id': typeof EpisodesIdRoute
   '/galerie/$id': typeof GalerieIdRoute
   '/series/$id': typeof SeriesIdRoute
   '/admin': typeof AdminIndexRoute
+  '/concours': typeof ConcoursIndexRoute
   '/galerie': typeof GalerieIndexRoute
+  '/admin/concours/$id': typeof AdminConcoursIdRoute
   '/admin/episodes/$id': typeof AdminEpisodesIdRoute
   '/admin/utilisateurs/$id': typeof AdminUtilisateursIdRoute
+  '/admin/concours': typeof AdminConcoursIndexRoute
   '/admin/episodes': typeof AdminEpisodesIndexRoute
   '/admin/utilisateurs': typeof AdminUtilisateursIndexRoute
 }
@@ -263,18 +303,23 @@ export interface FileRoutesById {
   '/styles': typeof StylesRoute
   '/verifier': typeof VerifierRoute
   '/admin/avis': typeof AdminAvisRoute
+  '/admin/indicateurs': typeof AdminIndicateursRoute
   '/admin/journal': typeof AdminJournalRoute
   '/admin/moderation': typeof AdminModerationRoute
   '/admin/paiements': typeof AdminPaiementsRoute
   '/admin/parrainages': typeof AdminParrainagesRoute
   '/admin/publications': typeof AdminPublicationsRoute
+  '/concours/$slug': typeof ConcoursSlugRoute
   '/episodes/$id': typeof EpisodesIdRoute
   '/galerie/$id': typeof GalerieIdRoute
   '/series/$id': typeof SeriesIdRoute
   '/admin/': typeof AdminIndexRoute
+  '/concours/': typeof ConcoursIndexRoute
   '/galerie/': typeof GalerieIndexRoute
+  '/admin/concours/$id': typeof AdminConcoursIdRoute
   '/admin/episodes/$id': typeof AdminEpisodesIdRoute
   '/admin/utilisateurs/$id': typeof AdminUtilisateursIdRoute
+  '/admin/concours/': typeof AdminConcoursIndexRoute
   '/admin/episodes/': typeof AdminEpisodesIndexRoute
   '/admin/utilisateurs/': typeof AdminUtilisateursIndexRoute
 }
@@ -296,18 +341,23 @@ export interface FileRouteTypes {
     | '/styles'
     | '/verifier'
     | '/admin/avis'
+    | '/admin/indicateurs'
     | '/admin/journal'
     | '/admin/moderation'
     | '/admin/paiements'
     | '/admin/parrainages'
     | '/admin/publications'
+    | '/concours/$slug'
     | '/episodes/$id'
     | '/galerie/$id'
     | '/series/$id'
     | '/admin/'
+    | '/concours/'
     | '/galerie/'
+    | '/admin/concours/$id'
     | '/admin/episodes/$id'
     | '/admin/utilisateurs/$id'
+    | '/admin/concours/'
     | '/admin/episodes/'
     | '/admin/utilisateurs/'
   fileRoutesByTo: FileRoutesByTo
@@ -326,18 +376,23 @@ export interface FileRouteTypes {
     | '/styles'
     | '/verifier'
     | '/admin/avis'
+    | '/admin/indicateurs'
     | '/admin/journal'
     | '/admin/moderation'
     | '/admin/paiements'
     | '/admin/parrainages'
     | '/admin/publications'
+    | '/concours/$slug'
     | '/episodes/$id'
     | '/galerie/$id'
     | '/series/$id'
     | '/admin'
+    | '/concours'
     | '/galerie'
+    | '/admin/concours/$id'
     | '/admin/episodes/$id'
     | '/admin/utilisateurs/$id'
+    | '/admin/concours'
     | '/admin/episodes'
     | '/admin/utilisateurs'
   id:
@@ -357,18 +412,23 @@ export interface FileRouteTypes {
     | '/styles'
     | '/verifier'
     | '/admin/avis'
+    | '/admin/indicateurs'
     | '/admin/journal'
     | '/admin/moderation'
     | '/admin/paiements'
     | '/admin/parrainages'
     | '/admin/publications'
+    | '/concours/$slug'
     | '/episodes/$id'
     | '/galerie/$id'
     | '/series/$id'
     | '/admin/'
+    | '/concours/'
     | '/galerie/'
+    | '/admin/concours/$id'
     | '/admin/episodes/$id'
     | '/admin/utilisateurs/$id'
+    | '/admin/concours/'
     | '/admin/episodes/'
     | '/admin/utilisateurs/'
   fileRoutesById: FileRoutesById
@@ -388,9 +448,11 @@ export interface RootRouteChildren {
   SoutenirRoute: typeof SoutenirRoute
   StylesRoute: typeof StylesRoute
   VerifierRoute: typeof VerifierRoute
+  ConcoursSlugRoute: typeof ConcoursSlugRoute
   EpisodesIdRoute: typeof EpisodesIdRoute
   GalerieIdRoute: typeof GalerieIdRoute
   SeriesIdRoute: typeof SeriesIdRoute
+  ConcoursIndexRoute: typeof ConcoursIndexRoute
   GalerieIndexRoute: typeof GalerieIndexRoute
 }
 
@@ -508,6 +570,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAvisRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/indicateurs': {
+      id: '/admin/indicateurs'
+      path: '/indicateurs'
+      fullPath: '/admin/indicateurs'
+      preLoaderRoute: typeof AdminIndicateursRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/journal': {
       id: '/admin/journal'
       path: '/journal'
@@ -543,6 +612,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminPublicationsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/concours/': {
+      id: '/concours/'
+      path: '/concours'
+      fullPath: '/concours/'
+      preLoaderRoute: typeof ConcoursIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/concours/$slug': {
+      id: '/concours/$slug'
+      path: '/concours/$slug'
+      fullPath: '/concours/$slug'
+      preLoaderRoute: typeof ConcoursSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/episodes/$id': {
       id: '/episodes/$id'
       path: '/episodes/$id'
@@ -570,6 +653,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/series/$id'
       preLoaderRoute: typeof SeriesIdRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/admin/concours/': {
+      id: '/admin/concours/'
+      path: '/concours'
+      fullPath: '/admin/concours/'
+      preLoaderRoute: typeof AdminConcoursIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/concours/$id': {
+      id: '/admin/concours/$id'
+      path: '/concours/$id'
+      fullPath: '/admin/concours/$id'
+      preLoaderRoute: typeof AdminConcoursIdRouteImport
+      parentRoute: typeof AdminRoute
     }
     '/admin/episodes/': {
       id: '/admin/episodes/'
@@ -604,28 +701,34 @@ declare module '@tanstack/react-router' {
 
 interface AdminRouteChildren {
   AdminAvisRoute: typeof AdminAvisRoute
+  AdminIndicateursRoute: typeof AdminIndicateursRoute
   AdminJournalRoute: typeof AdminJournalRoute
   AdminModerationRoute: typeof AdminModerationRoute
   AdminPaiementsRoute: typeof AdminPaiementsRoute
   AdminParrainagesRoute: typeof AdminParrainagesRoute
   AdminPublicationsRoute: typeof AdminPublicationsRoute
   AdminIndexRoute: typeof AdminIndexRoute
+  AdminConcoursIdRoute: typeof AdminConcoursIdRoute
   AdminEpisodesIdRoute: typeof AdminEpisodesIdRoute
   AdminUtilisateursIdRoute: typeof AdminUtilisateursIdRoute
+  AdminConcoursIndexRoute: typeof AdminConcoursIndexRoute
   AdminEpisodesIndexRoute: typeof AdminEpisodesIndexRoute
   AdminUtilisateursIndexRoute: typeof AdminUtilisateursIndexRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
   AdminAvisRoute: AdminAvisRoute,
+  AdminIndicateursRoute: AdminIndicateursRoute,
   AdminJournalRoute: AdminJournalRoute,
   AdminModerationRoute: AdminModerationRoute,
   AdminPaiementsRoute: AdminPaiementsRoute,
   AdminParrainagesRoute: AdminParrainagesRoute,
   AdminPublicationsRoute: AdminPublicationsRoute,
   AdminIndexRoute: AdminIndexRoute,
+  AdminConcoursIdRoute: AdminConcoursIdRoute,
   AdminEpisodesIdRoute: AdminEpisodesIdRoute,
   AdminUtilisateursIdRoute: AdminUtilisateursIdRoute,
+  AdminConcoursIndexRoute: AdminConcoursIndexRoute,
   AdminEpisodesIndexRoute: AdminEpisodesIndexRoute,
   AdminUtilisateursIndexRoute: AdminUtilisateursIndexRoute,
 }
@@ -647,9 +750,11 @@ const rootRouteChildren: RootRouteChildren = {
   SoutenirRoute: SoutenirRoute,
   StylesRoute: StylesRoute,
   VerifierRoute: VerifierRoute,
+  ConcoursSlugRoute: ConcoursSlugRoute,
   EpisodesIdRoute: EpisodesIdRoute,
   GalerieIdRoute: GalerieIdRoute,
   SeriesIdRoute: SeriesIdRoute,
+  ConcoursIndexRoute: ConcoursIndexRoute,
   GalerieIndexRoute: GalerieIndexRoute,
 }
 export const routeTree = rootRouteImport

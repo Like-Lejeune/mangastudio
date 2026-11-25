@@ -11,10 +11,12 @@ export const Route = createFileRoute("/admin")({
 
 const TABS = [
   ["/admin", "Vue d'ensemble", true],
+  ["/admin/indicateurs", "Indicateurs", false],
   ["/admin/utilisateurs", "Utilisateurs", false],
   ["/admin/episodes", "Épisodes", false],
   ["/admin/paiements", "Paiements", false],
   ["/admin/publications", "Publications", false],
+  ["/admin/concours", "Concours", false],
   ["/admin/avis", "Avis", false],
   ["/admin/parrainages", "Parrainages", false],
   ["/admin/moderation", "Modération", false],
