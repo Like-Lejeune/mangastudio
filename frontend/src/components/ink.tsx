@@ -51,12 +51,12 @@ export function Onomatopee({ children, className }: { children: ReactNode; class
 export function ErrorNote({ error, inline }: { error: unknown; inline?: boolean }) {
   if (!error) return null;
   const e = error as ApiError;
-  const msg = e?.message ?? "Une erreur est survenue.";
+  const msg = e?.message ?? tr("Une erreur est survenue.", "Something went wrong.");
   const toPlans = e?.code === "plan_limit" || e?.code === "insufficient_credits";
   return (
     <p role="alert" className={cn("text-[14px] leading-5 font-medium text-alerte", !inline && "rounded-[4px] border-2 border-alerte bg-bulle p-3")}>
-      <span className="font-bold">Erreur : </span>{msg}
-      {toPlans && (<> {" "}<Link to="/abonnements" className="font-bold text-indigo underline">Voir les abonnements</Link></>)}
+      <span className="font-bold">{tr("Erreur : ", "Error: ")}</span>{msg}
+      {toPlans && (<> {" "}<Link to="/abonnements" className="font-bold text-indigo underline">{tr("Voir les abonnements", "See plans")}</Link></>)}
     </p>
   );
 }
@@ -76,6 +76,7 @@ export function Container({ children, className }: { children: ReactNode; classN
 
 import { Navigate } from "@tanstack/react-router";
 import { useMe, useToken } from "@/lib/session";
+import { tr } from "@/lib/i18n";
 /** Exige une connexion et, sauf `allowUnverified`, une adresse e-mail confirmée. */
 export function RequireAuth({ children, allowUnverified = false }: { children: ReactNode; allowUnverified?: boolean }) {
   const token = useToken();

@@ -1,3 +1,5 @@
+import { getLang, tr } from "@/lib/i18n";
+
 const TOKEN_KEY = "mangastudio.token";
 const BASE = (import.meta.env['VITE_API_URL'] as string | undefined) ?? "http://localhost:8000";
 
@@ -5,12 +7,12 @@ const listeners = new Set<() => void>();
 /** Téléchargement d'un fichier protégé (ex. PDF) : le jeton part dans l'en-tête, puis le navigateur enregistre. */
 export async function downloadFile(path: string, filename: string): Promise<void> {
   const token = tokenStore.get();
-  const r = await fetch(`${BASE}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  const r = await fetch(`${BASE}${path}`, { headers: { "Accept-Language": getLang(), ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
   if (!r.ok) {
     let detail: unknown = null;
     try { detail = (await r.json()).detail; } catch { /* réponse non JSON */ }
     const d = detail as { message?: string; code?: string } | string | null;
-    throw new ApiError(typeof d === "string" ? d : d?.message ?? "Téléchargement impossible.", r.status, typeof d === "object" && d ? d.code : undefined);
+    throw new ApiError(typeof d === "string" ? d : d?.message ?? tr("Téléchargement impossible.", "Download failed."), r.status, typeof d === "object" && d ? d.code : undefined);
   }
   const url = URL.createObjectURL(await r.blob());
   const a = document.createElement("a");
@@ -44,13 +46,14 @@ export async function api<T>(path: string, opts: { method?: string; body?: unkno
     res = await fetch(BASE + path, {
       method: opts.method ?? (opts.body ? "POST" : "GET"),
       headers: {
+        "Accept-Language": getLang(),
         ...(opts.body ? { "Content-Type": "application/json" } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: opts.body ? JSON.stringify(opts.body) : null,
     });
   } catch {
-    throw new ApiError("Le studio est injoignable pour le moment. Réessayez dans un instant.", 0);
+    throw new ApiError(tr("Le studio est injoignable pour le moment. Réessayez dans un instant.", "The studio can't be reached right now. Please try again in a moment."), 0);
   }
   if (res.status === 401 && token) {
     tokenStore.set(null);
@@ -66,9 +69,10 @@ export async function api<T>(path: string, opts: { method?: string; body?: unkno
     // Erreur de validation de l'API : `detail` est une liste de champs refusés.
     if (Array.isArray(detail)) {
       const fields = detail.map((d) => String((d as { loc?: unknown[] }).loc?.at(-1) ?? "")).filter(Boolean);
-      throw new ApiError(`Certains champs sont invalides${fields.length ? ` (${fields.join(", ")})` : ""}. Vérifiez le formulaire.`, res.status, "validation");
+      const list = fields.length ? ` (${fields.join(", ")})` : "";
+      throw new ApiError(tr(`Certains champs sont invalides${list}. Vérifiez le formulaire.`, `Some fields are invalid${list}. Please check the form.`), res.status, "validation");
     }
-    throw new ApiError(typeof detail === "string" ? detail : "Une erreur est survenue.", res.status);
+    throw new ApiError(typeof detail === "string" ? detail : tr("Une erreur est survenue.", "Something went wrong."), res.status);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -78,7 +82,7 @@ export async function api<T>(path: string, opts: { method?: string; body?: unkno
 export type Plan = { id: string; name: string; max_characters: number; max_pages: number; color: boolean; redraw: boolean };
 export type Me = {
   id: string; email: string; is_admin: boolean; email_verified: boolean;
-  display_name: string; credits: number; plan: Plan; weekly_refill?: number;
+  display_name: string; credits: number; plan: Plan; weekly_refill?: number; locale?: string | null;
   subscription?: { status: string; provider: string; period_end: string } | null;
 };
 /** `premise` est l'idée de départ saisie à la création (l'API ne renvoie pas de champ `pitch`). */
@@ -103,6 +107,16 @@ export const STATUS_LABEL: Record<string, string> = {
   moderating: "Vérification du contenu", drawing: "Dessin des pages", done: "Terminé",
   blocked: "Refusé", failed: "Interrompu", canceled: "Abandonné",
 };
+const STATUS_LABEL_EN: Record<string, string> = {
+  queued: "Queued", designing: "Designing characters", writing: "Writing the script",
+  moderating: "Checking content", drawing: "Drawing pages", done: "Done",
+  blocked: "Refused", failed: "Interrupted", canceled: "Abandoned",
+};
+/** Libellé d'un statut d'épisode dans la langue courante (STATUS_LABEL reste en français pour l'administration). */
+export const statusLabel = (s: string) => (getLang() === "en" ? STATUS_LABEL_EN : STATUS_LABEL)[s] ?? s;
+/** Nom d'un plan dans la langue courante (l'API renvoie le nom français). */
+export const planName = (id: string, fallback: string) =>
+  getLang() === "en" ? ({ free: "Discovery", creator: "Creator", studio: "Studio" } as Record<string, string>)[id] ?? fallback : fallback;
 
 /** Réduit une photo à 1280 px et la convertit en JPEG : l'API n'accepte que JPEG, PNG ou WebP, 3 Mo au plus. */
 export async function photoToDataUrl(file: File, max = 1280): Promise<string> {

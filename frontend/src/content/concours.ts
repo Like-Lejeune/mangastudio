@@ -37,12 +37,49 @@ Seuls le nom d'auteur et l'histoire sont montrés publiquement. L'adresse e-mail
 10. Contact
 Pour toute question : page « Nous contacter ».`;
 
+/** Version anglaise du règlement type, pour le champ « Règlement (anglais) » d'un concours. */
+export const REGLEMENT_TYPE_EN = `1. Organiser
+The contest is organised by MangaStudio (PsikaLab). Entry is free: no purchase is necessary.
+
+2. Who can enter
+Anyone with a confirmed MangaStudio account. Team and jury members cannot compete.
+
+3. How to enter
+Create a chapter on MangaStudio during the contest period, submit it to the "Read" gallery, then enter it from the contest page. The chapter must follow the theme, the required style if there is one, and the gallery's publishing rules.
+
+4. What is refused
+Chapters that reuse characters, universes or brands belonging to others, chapters that break the publishing rules, and any attempt to rig likes (fake accounts, multiple accounts, buying or trading likes). The organiser can disqualify a chapter, giving the reason.
+
+5. Ranking
+Jury score out of 20 (60%): fit with the theme, originality of the story, quality of the storytelling.
+Likes received during the contest (40%): the most liked story gets 20, the others in proportion.
+In case of a tie, the story with the most likes goes first, then the one entered first.
+
+6. Prizes
+Prizes are listed on the contest page. They are credited automatically to the winners' accounts when the results are announced. They cannot be exchanged or converted into money.
+
+7. Results
+Results are published on the contest page after the jury's deliberation. Winning chapters stay in the gallery with their prize shown.
+
+8. Rights
+Each author remains the owner of their story. By entering, they allow MangaStudio to show it on the platform and to show excerpts to announce the contest and its results, always with their author name.
+
+9. Data
+Only the author name and the story are shown publicly. The email address is never shown.
+
+10. Contact
+For any question: "Contact us" page.`;
+
 /** Premier concours prévu au planning : du 21 décembre au 17 janvier, en afro-manga. */
 export const CONTES_AFRIQUE = {
   title: "Contes et légendes d'Afrique",
   theme: "Revisitez un conte, une légende ou un mythe d'Afrique en afro-manga.",
   description:
     "Mami Wata, Soundiata, la tortue et ses ruses, les esprits de la forêt… Choisissez un conte que vous connaissez, ou inventez une légende de votre village, et racontez-le à votre façon en un chapitre d'afro-manga. Le jury regarde le respect du thème, l'originalité et la façon de raconter ; les lecteurs votent avec leurs « j'aime ».",
+  title_en: "African Tales and Legends",
+  theme_en: "Retell an African tale, legend or myth in afro-manga.",
+  description_en:
+    "Mami Wata, Sundiata, the tortoise and its tricks, the spirits of the forest… Pick a tale you know, or invent a legend from your village, and tell it your way in one afro-manga chapter. The jury looks at the fit with the theme, originality and storytelling; readers vote with their likes.",
   style: "afro",
   starts: "2026-12-21T00:00",
   ends: "2027-01-17T23:59",

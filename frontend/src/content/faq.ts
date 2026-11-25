@@ -1,7 +1,9 @@
-/** Questions fréquentes, par rubrique. Le texte accepte des retours à la ligne simples. */
+import { pick } from "@/lib/i18n";
+
+/** Questions fréquentes, par rubrique (français et anglais). Le texte accepte des retours à la ligne simples. */
 export type Question = { q: string; r: string };
 
-export const FAQ: { rubrique: string; questions: Question[] }[] = [
+const FAQ_FR: { rubrique: string; questions: Question[] }[] = [
   {
     rubrique: "Découvrir MangaStudio",
     questions: [
@@ -56,3 +58,62 @@ export const FAQ: { rubrique: string; questions: Question[] }[] = [
     ],
   },
 ];
+
+const FAQ_EN: { rubrique: string; questions: Question[] }[] = [
+  {
+    rubrique: "Discover MangaStudio",
+    questions: [
+      { q: "What is MangaStudio?", r: "An online manga studio. You describe a story and your characters; MangaStudio writes the script, then draws every page, with speech balloons, in the style you choose: shōnen, shōjo, seinen, kodomo or afro-manga." },
+      { q: "Which style should I choose?", r: "Shōnen for action and adventure, shōjo for emotions and romance, seinen for adult, realistic stories, kodomo for children, afro-manga for African characters and settings. The “Styles” page shows an example of each." },
+      { q: "Do I need to know how to draw?", r: "No. Just tell your idea in a few lines and introduce your characters. You can then guide each episode: what should happen, the mood, the ending." },
+      { q: "How long does an episode take?", r: "A few minutes, depending on the number of pages. You follow the progress live: script, character sheets, then each page as it is drawn." },
+      { q: "What language are the balloons in?", r: "French or English: you choose the language when you create the series." },
+      { q: "Do characters stay the same from page to page?", r: "Yes. Each character gets a model sheet (face, hair, outfit) used as the reference for every page and every episode of the series." },
+    ],
+  },
+  {
+    rubrique: "Credits and payment",
+    questions: [
+      { q: "What is a credit?", r: "One credit = one delivered image: a page, a character sheet or a cover. The number of credits needed is shown before you start the episode." },
+      { q: "How can I earn free credits?", r: "Three ways, detailed on the “Earn credits” page: invite friends with your link (they get 5 credits, you get 10 when they finish their first episode, then 25 on their first purchase), complete missions (first episode, first share, published review), and the weekly top-up: on the free plan, your balance goes back up to 5 credits on your first visit of the week." },
+      { q: "What happens if an episode is interrupted?", r: "Credits are reserved at launch, then only the images actually delivered are charged. If an episode stops along the way, credits for undelivered images are refunded, and you can resume the episode." },
+      { q: "How do I pay?", r: "By mobile money, MTN Mobile Money or Orange Money. Choose the operator, enter your number and confirm the payment on your phone. Your plan is activated as soon as the payment is confirmed." },
+      { q: "Does the subscription renew automatically?", r: "No. A paid plan is active for 30 days, with no automatic charge. You renew it whenever you want from the Plans page." },
+      { q: "Do my credits expire?", r: "Plan credits are valid for the 30-day period. Credits from a credit pack never expire." },
+      { q: "I paid but my plan isn't active.", r: "Wait a few minutes: the operator's confirmation can be delayed, and the page updates by itself. If nothing changes, write to us with the date, the amount and the number you used." },
+    ],
+  },
+  {
+    rubrique: "Characters and photos",
+    questions: [
+      { q: "Can I give a character a photo?", r: "Yes, in JPEG, PNG or WebP, 3 MB maximum. Only use your own photo or one of a person who has given you their consent: you are asked to confirm it when uploading." },
+      { q: "How many characters per episode?", r: "It depends on your plan: details are on the Pricing page. The Studio plan allows up to 10." },
+    ],
+  },
+  {
+    rubrique: "Content and rules",
+    questions: [
+      { q: "Why was my request refused?", r: "MangaStudio refuses sexual content, anything involving minors inappropriately, extreme violence shown in detail, hatred towards a group, glorification of terrorism, and humiliating depictions of real people. A refusal happens before drawing: no credits are charged." },
+      { q: "“Drawing capacity reached for today”: what does it mean?", r: "To control its costs, the platform sets a daily drawing limit. When it is reached, new episodes are refused until the next day, without charging credits. Episodes already started run to the end." },
+    ],
+  },
+  {
+    rubrique: "My account",
+    questions: [
+      { q: "I don't receive the confirmation code.", r: "Check your spam folder, then use “Resend the code” after a minute. Also check the address shown: if it's wrong, “Wrong address? Start over” lets you sign up again. Temporary addresses (yopmail, mailinator…) are not accepted." },
+      { q: "Why confirm my email address?", r: "So that free credits go to real people: without confirmation, bots could create accounts one after another and use up the platform's drawing capacity. Your free credits arrive as soon as you confirm." },
+      { q: "I forgot my password.", r: "On the sign-in page, click “Forgot your password?” and enter your address: you'll receive a code by email to choose a new password. Your other devices are then signed out." },
+      { q: "How do I leave a review?", r: "At the end of an episode, or at any time from “Leave a review” at the bottom of the page. It is published on the home page after a quick check, with the name you choose, never your email address. You can edit or remove it whenever you like." },
+      { q: "How do I delete my account?", r: "Write to us from your account's email address; your series, characters and photos will be deleted." },
+    ],
+  },
+  {
+    rubrique: "Support us",
+    questions: [
+      { q: "What are donations used for?", r: "To pay for the servers and the AI models that draw the mangas, to keep prices affordable and a free plan available. A donation doesn't give credits: it's support. Thank you!" },
+    ],
+  },
+];
+
+/** Les questions dans la langue courante. */
+export const faq = () => pick({ fr: FAQ_FR, en: FAQ_EN });

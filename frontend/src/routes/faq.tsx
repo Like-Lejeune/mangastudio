@@ -1,25 +1,27 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronDown } from "lucide-react";
-import { FAQ } from "@/content/faq";
+import { faq } from "@/content/faq";
+import { tr } from "@/lib/i18n";
 import { Container, PageTitle } from "@/components/ink";
 
 export const Route = createFileRoute("/faq")({
   head: () => ({
     meta: [
-      { title: "Questions fréquentes — MangaStudio" },
-      { name: "description", content: "Crédits, paiement mobile money, personnages, règles de contenu : les réponses aux questions sur MangaStudio." },
+      { title: tr("Questions fréquentes — MangaStudio", "FAQ — MangaStudio") },
+      { name: "description", content: tr("Crédits, paiement mobile money, personnages, règles de contenu : les réponses aux questions sur MangaStudio.", "Credits, mobile money payment, characters, content rules: answers to your questions about MangaStudio.") },
     ],
   }),
   component: FaqPage,
 });
 
 function FaqPage() {
+  const FAQ = faq();
   return (
     <Container className="max-w-[860px]">
-      <PageTitle sub={<>Vous ne trouvez pas votre réponse ? <Link to="/contact" className="font-bold text-indigo underline">Écrivez-nous</Link>.</>}>
-        Questions fréquentes
+      <PageTitle sub={<>{tr("Vous ne trouvez pas votre réponse ? ", "Can't find your answer? ")}<Link to="/contact" className="font-bold text-indigo underline">{tr("Écrivez-nous", "Write to us")}</Link>.</>}>
+        {tr("Questions fréquentes", "Frequently asked questions")}
       </PageTitle>
-      <nav aria-label="Rubriques" className="mb-10 flex flex-wrap gap-2">
+      <nav aria-label={tr("Rubriques", "Topics")} className="mb-10 flex flex-wrap gap-2">
         {FAQ.map((r, i) => (
           <a key={r.rubrique} href={`#rubrique-${i}`} className="inline-flex min-h-10 items-center rounded-full border-2 border-encre bg-bulle px-4 text-[14px] font-bold hover:bg-soleil">
             {r.rubrique}

@@ -4,6 +4,7 @@ import { Button, Pill } from "./ink";
 import { ACTIVE, STATUS_LABEL } from "@/lib/api";
 import { num } from "@/lib/admin";
 import { cn } from "@/lib/utils";
+import { tr } from "@/lib/i18n";
 
 /** Un chiffre clé, avec une ligne de contexte. */
 export function Stat({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: ReactNode; tone?: "alerte" }) {
@@ -51,10 +52,10 @@ export function Table({ head, children, empty, minWidth = 720 }: { head: (string
 export function Pager({ page, pages, total, onPage }: { page: number; pages: number; total: number; onPage: (p: number) => void }) {
   return (
     <div className="mt-4 flex flex-wrap items-center gap-3">
-      <Button aria-label="Page précédente" disabled={page <= 1} onClick={() => onPage(page - 1)}><ChevronLeft size={20} strokeWidth={2} aria-hidden /></Button>
+      <Button aria-label={tr("Page précédente", "Previous page")} disabled={page <= 1} onClick={() => onPage(page - 1)}><ChevronLeft size={20} strokeWidth={2} aria-hidden /></Button>
       <span className="tabular font-bold">{page} / {pages}</span>
-      <Button aria-label="Page suivante" disabled={page >= pages} onClick={() => onPage(page + 1)}><ChevronRight size={20} strokeWidth={2} aria-hidden /></Button>
-      <span className="text-[14px] text-encre-douce"><span className="tabular">{num(total)}</span> résultat{total > 1 ? "s" : ""}</span>
+      <Button aria-label={tr("Page suivante", "Next page")} disabled={page >= pages} onClick={() => onPage(page + 1)}><ChevronRight size={20} strokeWidth={2} aria-hidden /></Button>
+      <span className="text-[14px] text-encre-douce"><span className="tabular">{num(total)}</span> {total > 1 ? tr("résultats", "results") : tr("résultat", "result")}</span>
     </div>
   );
 }

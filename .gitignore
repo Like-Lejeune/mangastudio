@@ -24,3 +24,6 @@ node_modules/
 dist/
 .tanstack/
 sauvegardes/
+# Dépôt des fichiers livrés et anciennes versions gardées par ranger.py
+a_ranger/
+.anciennes_versions/

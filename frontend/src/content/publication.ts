@@ -1,3 +1,5 @@
+import { pick } from "@/lib/i18n";
+
 /**
  * Règles de publication dans la galerie « À lire ».
  *
@@ -7,8 +9,9 @@
  */
 export const VALIDE = false;
 export const MISE_A_JOUR = "24 novembre 2026";
+export const MISE_A_JOUR_EN = "24 November 2026";
 
-export const REGLES: { titre: string; points: string[] }[] = [
+const REGLES_FR: { titre: string; points: string[] }[] = [
   {
     titre: "Ce que vous publiez",
     points: [
@@ -52,3 +55,52 @@ export const REGLES: { titre: string; points: string[] }[] = [
     ],
   },
 ];
+
+const REGLES_EN: { titre: string; points: string[] }[] = [
+  {
+    titre: "What you publish",
+    points: [
+      "You publish a story you created yourself on MangaStudio: the idea, the characters and the text are yours.",
+      "No characters, brands or universes that belong to others (well-known manga or film heroes, logos…), unless you have written permission.",
+      "No recognisable real people shown in a humiliating or misleading way, or without their consent.",
+    ],
+  },
+  {
+    titre: "What is refused",
+    points: [
+      "Any sexual content involving minors, without exception, and any explicit sexual content.",
+      "Calls for hatred or violence against people or groups (origin, religion, sex, disability…).",
+      "Gratuitous violence shown approvingly, glorification of terrorism or crime.",
+      "Other people's personal information (numbers, addresses…) and scams.",
+    ],
+  },
+  {
+    titre: "Review by the team",
+    points: [
+      "Every chapter is reviewed before it appears in the gallery. The review can take a few days.",
+      "The team can refuse or remove a chapter; the reason is shown to you on the episode page.",
+      "Once corrected, you can submit your chapter again.",
+    ],
+  },
+  {
+    titre: "Your rights",
+    points: [
+      "You remain the owner of your story.",
+      "By publishing it, you allow MangaStudio to show it for free in the gallery and on the home page, and to show excerpts to promote the platform, always with your author name.",
+      "You can remove your chapter from the gallery at any time, from the episode page. It then disappears from the gallery and the home page.",
+      "Your author name is shown; your email address never is.",
+    ],
+  },
+  {
+    titre: "Likes",
+    points: [
+      "One like per confirmed account and per story. You can't like your own story.",
+      "Buying, trading or faking likes (fake accounts, multiple accounts) is forbidden: those likes are cancelled and the story may be removed.",
+      "“Most liked this week” counts likes from the last 7 days. “Staff picks” are chosen by the team.",
+    ],
+  },
+];
+
+/** Les règles dans la langue courante. */
+export const regles = () => pick({ fr: REGLES_FR, en: REGLES_EN });
+export const miseAJour = () => pick({ fr: MISE_A_JOUR, en: MISE_A_JOUR_EN });
