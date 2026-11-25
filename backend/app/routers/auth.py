@@ -8,13 +8,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import growth, mailer, ratelimit, usage
+from app import growth, i18n, mailer, ratelimit, usage
 from app.config import get_settings
 from app.db import get_session
 from app.disposable import is_disposable
 from app.models import CreditLedger, User
 from app.plans import PLANS
-from app.schemas import ForgotIn, Login, Register, ResetIn, VerifyIn
+from app.schemas import ForgotIn, Login, ProfileIn, Register, ResetIn, VerifyIn
 from app.security import create_token, current_user, hash_password, verify_password
 from app.services import current_plan
 
@@ -46,7 +46,7 @@ async def send_new_code(session: AsyncSession, user: User) -> None:
     user.verify_attempts = 0
     await session.commit()
     try:
-        await mailer.send_code(user.email, user.display_name, code, CODE_MINUTES)
+        await mailer.send_code(user.email, user.display_name, code, CODE_MINUTES, user.locale or i18n.lang())
     except mailer.MailError:
         raise HTTPException(502, {"code": "mail_failed", "message": "L'e-mail n'a pas pu partir. Réessayez dans un instant avec « Renvoyer le code »."}) from None
 
@@ -70,7 +70,8 @@ async def register(body: Register, request: Request, session: AsyncSession = Dep
         await session.flush()
     # Administrateur seulement si l'adresse figure dans ADMIN_EMAILS (jamais « le premier inscrit »).
     user = User(email=email, display_name=body.display_name, password_hash=hash_password(body.password),
-                is_admin=email in settings.admin_email_set, email_verified=not settings.email_verification)
+                is_admin=email in settings.admin_email_set, email_verified=not settings.email_verification,
+                locale=body.locale or i18n.lang())
     session.add(user)
     await session.flush()
     user.referral_code = await growth.new_code(session)
@@ -151,13 +152,21 @@ async def me(user: User = Depends(current_user), session: AsyncSession = Depends
     plan, sub = await current_plan(session, user.id)
     return {
         "id": user.id, "email": user.email, "display_name": user.display_name, "is_admin": user.is_admin,
-        "email_verified": user.email_verified,
+        "email_verified": user.email_verified, "locale": user.locale,
         "credits": await usage.balance(session, user.id),
         "weekly_refill": refill,
         "plan": {"id": plan.id, "name": plan.name, "max_characters": plan.max_characters, "max_pages": plan.max_pages,
                  "color": plan.color, "redraw": plan.redraw},
         "subscription": {"status": sub.status, "provider": sub.provider, "period_end": sub.period_end.isoformat()} if sub else None,
     }
+
+
+@router.patch("/me")
+async def update_me(body: ProfileIn, user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
+    """Langue choisie avec le bouton FR / EN : elle sert pour les e-mails et à la prochaine connexion."""
+    user.locale = body.locale
+    await session.commit()
+    return {"locale": user.locale}
 
 
 # ---------- Mot de passe oublié ----------
@@ -181,7 +190,7 @@ async def forgot_password(body: ForgotIn, request: Request, session: AsyncSessio
         user.reset_attempts = 0
         await session.commit()
         try:
-            await mailer.send_reset_code(user.email, user.display_name, code, CODE_MINUTES)
+            await mailer.send_reset_code(user.email, user.display_name, code, CODE_MINUTES, user.locale or i18n.lang())
         except mailer.MailError:
             raise HTTPException(502, {"code": "mail_failed", "message": "L'e-mail n'a pas pu partir. Réessayez dans un instant."}) from None
     return {"sent": True}

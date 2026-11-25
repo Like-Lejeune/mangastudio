@@ -9,6 +9,7 @@ class Register(BaseModel):
     display_name: str = Field(min_length=1, max_length=60)
     password: str = Field(min_length=8, max_length=200)
     ref: str | None = Field(default=None, max_length=12)   # code de parrainage
+    locale: Literal["fr", "en"] | None = None               # langue du site au moment de l'inscription
 
 
 class VerifyIn(BaseModel):
@@ -116,3 +117,7 @@ class TestimonialIn(BaseModel):
 
 class TestimonialStatusIn(BaseModel):
     status: Literal["approved", "rejected", "pending"]
+
+
+class ProfileIn(BaseModel):
+    locale: Literal["fr", "en"]

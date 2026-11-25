@@ -7,6 +7,7 @@ from app.billing import trustchange_client as tc
 from app.billing.base import apply_event
 from app.config import get_settings
 from app.db import get_session
+from app.i18n import tr
 from app.models import PaymentIntent, User
 from app.plans import PACKS, PLANS
 from app.schemas import CheckoutIn
@@ -61,7 +62,7 @@ async def checkout(body: CheckoutIn, user: User = Depends(verified_user), sessio
         intent = await trust.start(session, user, body.product, body.phone, body.operator, amount=body.amount)
     except tc.TrustChangeError as e:
         raise HTTPException(502, {"code": "payment_failed", "message": e.message}) from None
-    return {**trust.intent_out(intent), "message": "Validez le paiement sur votre téléphone."}
+    return {**trust.intent_out(intent), "message": tr("Validez le paiement sur votre téléphone.")}
 
 
 @router.get("/billing/payments/{reference}")

@@ -10,6 +10,7 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 from email.utils import formataddr, make_msgid
+from html import escape as html_escape
 
 from app.config import get_settings
 
@@ -52,25 +53,45 @@ async def send(to: str, subject: str, text: str, html: str) -> None:
         raise MailError(str(e)) from e
 
 
-async def send_code(to: str, name: str, code: str, minutes: int) -> None:
-    text = (f"Bonjour {name},\n\nVoici votre code pour confirmer votre adresse sur MangaStudio :\n\n    {code}\n\n"
-            f"Il est valable {minutes} minutes. Si vous n'avez pas créé de compte, ignorez cet e-mail.\n\nL'équipe MangaStudio")
-    html = f"""<div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;color:#14110F">
-<p>Bonjour {name},</p>
-<p>Voici votre code pour confirmer votre adresse sur <b>MangaStudio</b> :</p>
-<p style="font-size:32px;font-weight:bold;letter-spacing:8px;background:#FFFDF8;border:2px solid #14110F;padding:16px;text-align:center">{code}</p>
-<p>Il est valable {minutes} minutes. Si vous n'avez pas créé de compte, ignorez cet e-mail.</p>
-<p>L'équipe MangaStudio</p></div>"""
-    await send(to, f"{code} est votre code MangaStudio", text, html)
+_CODE_STYLE = "font-size:32px;font-weight:bold;letter-spacing:8px;background:#FFFDF8;border:2px solid #14110F;padding:16px;text-align:center"
+
+_TEXTS = {
+    "verify": {
+        "fr": {"hello": "Bonjour {name},", "intro": "Voici votre code pour confirmer votre adresse sur MangaStudio :",
+               "valid": "Il est valable {minutes} minutes. Si vous n'avez pas créé de compte, ignorez cet e-mail.",
+               "sign": "L'équipe MangaStudio", "subject": "{code} est votre code MangaStudio"},
+        "en": {"hello": "Hello {name},", "intro": "Here is your code to confirm your email address on MangaStudio:",
+               "valid": "It is valid for {minutes} minutes. If you did not create an account, please ignore this email.",
+               "sign": "The MangaStudio team", "subject": "{code} is your MangaStudio code"},
+    },
+    "reset": {
+        "fr": {"hello": "Bonjour {name},", "intro": "Voici votre code pour choisir un nouveau mot de passe sur MangaStudio :",
+               "valid": "Il est valable {minutes} minutes. Si vous n'avez rien demandé, ignorez cet e-mail : votre mot de passe actuel reste valable.",
+               "sign": "L'équipe MangaStudio", "subject": "{code} : nouveau mot de passe MangaStudio"},
+        "en": {"hello": "Hello {name},", "intro": "Here is your code to choose a new password on MangaStudio:",
+               "valid": "It is valid for {minutes} minutes. If you did not ask for this, please ignore this email: your current password still works.",
+               "sign": "The MangaStudio team", "subject": "{code}: new MangaStudio password"},
+    },
+}
 
 
-async def send_reset_code(to: str, name: str, code: str, minutes: int) -> None:
-    text = (f"Bonjour {name},\n\nVoici votre code pour choisir un nouveau mot de passe sur MangaStudio :\n\n    {code}\n\n"
-            f"Il est valable {minutes} minutes. Si vous n'avez rien demandé, ignorez cet e-mail : votre mot de passe actuel reste valable.\n\nL'équipe MangaStudio")
-    html = f"""<div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;color:#14110F">
-<p>Bonjour {name},</p>
-<p>Voici votre code pour choisir un nouveau mot de passe sur <b>MangaStudio</b> :</p>
-<p style="font-size:32px;font-weight:bold;letter-spacing:8px;background:#FFFDF8;border:2px solid #14110F;padding:16px;text-align:center">{code}</p>
-<p>Il est valable {minutes} minutes. Si vous n'avez rien demandé, ignorez cet e-mail : votre mot de passe actuel reste valable.</p>
-<p>L'équipe MangaStudio</p></div>"""
-    await send(to, f"{code} : nouveau mot de passe MangaStudio", text, html)
+async def _send_code_mail(kind: str, to: str, name: str, code: str, minutes: int, lang: str) -> None:
+    t = _TEXTS[kind]["en" if lang == "en" else "fr"]
+    hello, valid = t["hello"].format(name=name), t["valid"].format(minutes=minutes)
+    text = f"{hello}\n\n{t['intro']}\n\n    {code}\n\n{valid}\n\n{t['sign']}"
+    e = html_escape
+    page = f"""<div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;color:#14110F">
+<p>{e(hello)}</p>
+<p>{e(t['intro']).replace('MangaStudio', '<b>MangaStudio</b>')}</p>
+<p style="{_CODE_STYLE}">{e(code)}</p>
+<p>{e(valid)}</p>
+<p>{e(t['sign'])}</p></div>"""
+    await send(to, t["subject"].format(code=code), text, page)
+
+
+async def send_code(to: str, name: str, code: str, minutes: int, lang: str = "fr") -> None:
+    await _send_code_mail("verify", to, name, code, minutes, lang)
+
+
+async def send_reset_code(to: str, name: str, code: str, minutes: int, lang: str = "fr") -> None:
+    await _send_code_mail("reset", to, name, code, minutes, lang)

@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.billing import trustchange_client as tc
 from app.billing.base import PaymentEvent, apply_event
 from app.config import get_settings
+from app.i18n import tr
 from app.models import PaymentIntent, User, new_id
 from app.plans import PACKS, PLANS
 
@@ -114,4 +115,4 @@ async def handle_webhook(session: AsyncSession, raw_body: bytes, headers: dict[s
 
 def intent_out(intent: PaymentIntent) -> dict:
     return {"reference": intent.reference, "product": intent.product, "amount": intent.amount, "currency": intent.currency,
-            "status": intent.status, "error": intent.error}
+            "status": intent.status, "error": tr(intent.error)}

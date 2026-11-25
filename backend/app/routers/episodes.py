@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 from app import budget, storage, usage
 from app.config import get_settings
 from app.db import get_session
+from app.i18n import tr
 from app.models import (
     Character,
     ContestEntry,
@@ -93,7 +94,7 @@ async def create_episode(series_id: str, body: EpisodeIn, user: User = Depends(v
 async def episode_out(session: AsyncSession, e: Episode) -> dict:
     """État complet d'un épisode (épisode chargé avec ses pages, sa série et sa distribution)."""
     return {
-        "id": e.id, "series_id": e.series_id, "number": e.number, "title": e.title, "status": e.status, "error": e.error,
+        "id": e.id, "series_id": e.series_id, "number": e.number, "title": e.title, "status": e.status, "error": tr(e.error),
         "page_count": e.page_count, "direction": e.direction, "summary": e.summary,
         "cast": [{"id": ec.character.id, "name": ec.character.name, "sheet_url": storage.url(ec.character.sheet_path)} for ec in e.cast],
         "pages": [{"id": p.id, "number": p.number, "status": p.status, "url": storage.url(p.image_path), "attempts": p.attempts,

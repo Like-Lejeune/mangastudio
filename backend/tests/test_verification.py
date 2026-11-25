@@ -11,7 +11,7 @@ def boite(monkeypatch):
     monkeypatch.setattr(get_settings(), "email_verification", True)
     recus: dict[str, str] = {}
 
-    async def faux_envoi(to, name, code, minutes):
+    async def faux_envoi(to, name, code, minutes, lang="fr"):
         recus[to] = code
     monkeypatch.setattr(mailer, "send_code", faux_envoi)
     return recus

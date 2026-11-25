@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from app import ratelimit, storage
 from app.db import get_session
+from app.i18n import tr
 from app.models import Episode, Like, Publication, User
 from app.routers.admin_ops import PAGE_SIZE, iso, log, page_of
 from app.routers.episodes import owned_episode
@@ -33,7 +34,7 @@ class PublishIn(BaseModel):
 def author_view(p: Publication | None) -> dict | None:
     if not p:
         return None
-    return {"id": p.id, "status": p.status, "reason": p.reason, "likes": p.likes, "featured": p.featured,
+    return {"id": p.id, "status": p.status, "reason": tr(p.reason), "likes": p.likes, "featured": p.featured,
             "requested_at": iso(p.requested_at), "published_at": iso(p.published_at)}
 
 

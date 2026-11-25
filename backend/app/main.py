@@ -3,11 +3,13 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import checks
+from app import checks, i18n
 from app.config import get_settings
 from app.db import init_db
 from app.routers import (
@@ -44,8 +46,17 @@ app.add_middleware(
     # En production, seules les adresses de FRONTEND_URL sont acceptées.
     allow_origin_regex=None if prod else r"http://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_origins=[o.strip() for o in settings.frontend_url.split(",") if o.strip()],
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"], allow_headers=["Authorization", "Content-Type"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"], allow_headers=["Authorization", "Content-Type", "Accept-Language"],
 )
+# Langue de la requête (Accept-Language) : les messages connus sont renvoyés en anglais si demandé.
+app.add_middleware(i18n.LanguageMiddleware)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def translated_http_error(request, exc: StarletteHTTPException):
+    exc.detail = i18n.tr_detail(exc.detail)
+    return await http_exception_handler(request, exc)
+
 
 for module in (auth, series, episodes, billing, admin, admin_ops, testimonials, sharing, referrals, gallery, contests, metrics):
     app.include_router(module.router)

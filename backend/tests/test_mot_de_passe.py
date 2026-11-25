@@ -8,7 +8,7 @@ from app import mailer
 def boite(monkeypatch):
     recus: dict[str, str] = {}
 
-    async def faux_envoi(to, name, code, minutes):
+    async def faux_envoi(to, name, code, minutes, lang="fr"):
         recus[to] = code
     monkeypatch.setattr(mailer, "send_reset_code", faux_envoi)
     return recus

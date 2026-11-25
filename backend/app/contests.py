@@ -17,6 +17,7 @@ from app.services import aware
 
 JURY_WEIGHT, LIKES_WEIGHT = 0.6, 0.4
 PHASES = {"a_venir": "À venir", "en_cours": "En cours", "deliberation": "Délibération du jury", "termine": "Terminé"}
+PHASES_EN = {"a_venir": "Upcoming", "en_cours": "Open", "deliberation": "Jury deliberating", "termine": "Finished"}
 
 
 def phase(c: Contest, at: datetime | None = None) -> str:
@@ -52,16 +53,19 @@ def score(jury: float, likes: int, max_likes: int) -> float:
     return round(JURY_WEIGHT * jury + LIKES_WEIGHT * likes_on_20, 2)
 
 
-def prize_label(p: dict) -> str:
+def prize_label(p: dict, lang: str = "fr") -> str:
     parts = []
     if p.get("credits"):
-        parts.append(f"{p['credits']} crédits")
+        parts.append(f"{p['credits']} credits" if lang == "en" else f"{p['credits']} crédits")
     if p.get("studio_days"):
-        parts.append(f"{p['studio_days']} jours de plan Studio")
+        parts.append(f"{p['studio_days']} days of Studio plan" if lang == "en" else f"{p['studio_days']} jours de plan Studio")
     return " + ".join(parts)
 
 
-def rank_label(rank: int) -> str:
+def rank_label(rank: int, lang: str = "fr") -> str:
+    if lang == "en":
+        suffix = "th" if 10 <= rank % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(rank % 10, "th")
+        return f"{rank}{suffix} prize"
     return "1er prix" if rank == 1 else f"{rank}e prix"
 
 

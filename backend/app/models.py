@@ -52,6 +52,8 @@ class User(Base):
     referred_by_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     signup_ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
     last_refill_week: Mapped[str | None] = mapped_column(String(8), nullable=True)   # ex. 2026-W48
+    # Langue du site et des e-mails : fr | en (vide : celle du navigateur).
+    locale: Mapped[str | None] = mapped_column(String(5), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
@@ -333,6 +335,11 @@ class Contest(Base):
     theme: Mapped[str] = mapped_column(String(300), default="")
     description: Mapped[str] = mapped_column(Text, default="")
     rules: Mapped[str] = mapped_column(Text, default="")               # règlement, affiché tel quel
+    # Version anglaise, facultative : affichée aux visiteurs anglophones quand elle est remplie.
+    title_en: Mapped[str] = mapped_column(String(120), default="")
+    theme_en: Mapped[str] = mapped_column(String(300), default="")
+    description_en: Mapped[str] = mapped_column(Text, default="")
+    rules_en: Mapped[str] = mapped_column(Text, default="")
     style: Mapped[str] = mapped_column(String(20), default="")         # style imposé ; vide = tous
     new_only: Mapped[bool] = mapped_column(Boolean, default=True)      # chapitres créés pendant le concours seulement
     max_entries: Mapped[int] = mapped_column(Integer, default=1)       # par participant

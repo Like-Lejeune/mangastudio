@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app import contests as C
 from app.db import get_session
+from app.i18n import lang, tr
 from app.models import Contest, ContestEntry, Episode, Publication, User
 from app.pipeline.prompts import STYLES
 from app.routers.admin_ops import iso, log
@@ -19,14 +20,22 @@ from app.services import aware
 router = APIRouter(tags=["concours"])
 
 
-def contest_out(c: Contest, entries: int = 0) -> dict:
-    return {
-        "id": c.id, "slug": c.slug, "title": c.title, "theme": c.theme, "description": c.description, "rules": c.rules,
+def contest_out(c: Contest, entries: int = 0, *, admin: bool = False) -> dict:
+    """Public : en anglais, la version anglaise remplace chaque texte quand elle est remplie.
+    Administration : les deux versions telles qu'enregistrées, pour le formulaire."""
+    en = not admin and lang() == "en"
+    pick = (lambda fr, eng: eng if en and eng.strip() else fr)
+    data = {
+        "id": c.id, "slug": c.slug, "title": pick(c.title, c.title_en), "theme": pick(c.theme, c.theme_en),
+        "description": pick(c.description, c.description_en), "rules": pick(c.rules, c.rules_en),
         "style": c.style, "new_only": c.new_only, "max_entries": c.max_entries,
-        "prizes": [{**p, "label": C.prize_label(p)} for p in sorted(c.prizes or [], key=lambda p: p.get("rank", 99))],
+        "prizes": [{**p, "label": C.prize_label(p, "en" if en else "fr")} for p in sorted(c.prizes or [], key=lambda p: p.get("rank", 99))],
         "starts_at": iso(c.starts_at), "ends_at": iso(c.ends_at), "results_at": iso(c.results_at),
-        "visible": c.visible, "phase": C.phase(c), "phase_label": C.PHASES[C.phase(c)], "entries": entries,
+        "visible": c.visible, "phase": C.phase(c), "phase_label": (C.PHASES_EN if en else C.PHASES)[C.phase(c)], "entries": entries,
     }
+    if admin:
+        data.update({"title_en": c.title_en, "theme_en": c.theme_en, "description_en": c.description_en, "rules_en": c.rules_en})
+    return data
 
 
 async def _counts(session: AsyncSession, ids: list[str]) -> dict[str, int]:
@@ -114,7 +123,7 @@ async def _eligible(session: AsyncSession, c: Contest, user: User) -> list[dict]
             continue
         why = _why_not(c, e)
         out.append({"publication_id": p.id, "title": f"{e.series.title or 'Manga'} — {e.title or f'Épisode {e.number}'}",
-                    "status": p.status, "ok": why is None, "why": why})
+                    "status": p.status, "ok": why is None, "why": tr(why)})
     return out
 
 
@@ -186,6 +195,10 @@ class ContestIn(BaseModel):
     theme: str = Field(default="", max_length=300)
     description: str = Field(default="", max_length=4000)
     rules: str = Field(default="", max_length=20000)
+    title_en: str = Field(default="", max_length=120)
+    theme_en: str = Field(default="", max_length=300)
+    description_en: str = Field(default="", max_length=4000)
+    rules_en: str = Field(default="", max_length=20000)
     style: str = Field(default="", max_length=20)
     new_only: bool = True
     max_entries: int = Field(default=1, ge=1, le=10)
@@ -207,6 +220,7 @@ class ContestIn(BaseModel):
 
 def _apply(c: Contest, b: ContestIn) -> None:
     c.title, c.theme, c.description, c.rules = b.title.strip(), b.theme.strip(), b.description.strip(), b.rules.strip()
+    c.title_en, c.theme_en, c.description_en, c.rules_en = b.title_en.strip(), b.theme_en.strip(), b.description_en.strip(), b.rules_en.strip()
     c.style, c.new_only, c.max_entries, c.visible = b.style, b.new_only, b.max_entries, b.visible
     c.prizes = [p.model_dump() for p in sorted(b.prizes, key=lambda p: p.rank) if p.credits or p.studio_days]
     c.starts_at, c.ends_at = aware(b.starts_at), aware(b.ends_at)
@@ -224,7 +238,7 @@ async def _free_slug(session: AsyncSession, wanted: str, own_id: str | None = No
 async def admin_list(session: AsyncSession = Depends(get_session)):
     rows = (await session.execute(select(Contest).order_by(Contest.starts_at.desc()))).scalars().all()
     counts = await _counts(session, [c.id for c in rows])
-    return {"items": [contest_out(c, counts.get(c.id, 0)) for c in rows]}
+    return {"items": [contest_out(c, counts.get(c.id, 0), admin=True) for c in rows]}
 
 
 @router.post("/admin/contests", status_code=201)
@@ -235,7 +249,7 @@ async def admin_create(body: ContestIn, admin: User = Depends(admin_user), sessi
     await session.flush()
     log(session, admin, "contest", "contest", c.id, f"Concours « {c.title} » créé" + (" et visible" if c.visible else " (brouillon)"))
     await session.commit()
-    return contest_out(c)
+    return contest_out(c, admin=True)
 
 
 async def _get(session: AsyncSession, contest_id: str) -> Contest:
@@ -255,14 +269,14 @@ async def admin_update(contest_id: str, body: ContestIn, admin: User = Depends(a
     _apply(c, body)
     log(session, admin, "contest", "contest", c.id, f"Concours « {c.title} » modifié" + ("" if c.visible else " (brouillon)"))
     await session.commit()
-    return contest_out(c)
+    return contest_out(c, admin=True)
 
 
 @router.get("/admin/contests/{contest_id}", dependencies=[Depends(admin_user)])
 async def admin_get(contest_id: str, session: AsyncSession = Depends(get_session)):
     c = await _get(session, contest_id)
     entries = await _entries_view(session, c, None, admin=True)
-    data = contest_out(c, sum(1 for e in entries if not e["disqualified"] and e["publication_status"] == "published"))
+    data = contest_out(c, sum(1 for e in entries if not e["disqualified"] and e["publication_status"] == "published"), admin=True)
     data["entries_list"] = entries
     return data
 
@@ -311,8 +325,9 @@ async def admin_results(contest_id: str, admin: User = Depends(admin_user), sess
 async def awards_for(session: AsyncSession, publication_id: str) -> list[dict]:
     """Prix gagnés par une histoire (affichés sur sa page de lecture)."""
     rows = (await session.execute(
-        select(ContestEntry.rank, ContestEntry.prize, Contest.title, Contest.slug).join(Contest, Contest.id == ContestEntry.contest_id)
+        select(ContestEntry.rank, ContestEntry.prize, Contest.title, Contest.title_en, Contest.slug).join(Contest, Contest.id == ContestEntry.contest_id)
         .where(ContestEntry.publication_id == publication_id, ContestEntry.prize != "", Contest.results_at.is_not(None))
     )).all()
-    return [{"rank": r, "label": f"{C.rank_label(r)} — {t}", "slug": s} for r, _, t, s in rows]
+    en = lang() == "en"
+    return [{"rank": r, "label": f"{C.rank_label(r, 'en' if en else 'fr')} — {(te if en and te else t)}", "slug": s} for r, _, t, te, s in rows]
 

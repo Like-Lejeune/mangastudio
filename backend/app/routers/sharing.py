@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app import growth, pdf, storage
+from app import growth, i18n, pdf, storage
 from app.config import get_settings
 from app.db import get_session
 from app.models import Episode, PdfDownload, User
@@ -63,9 +63,23 @@ async def _shared(session: AsyncSession, token: str) -> Episode | None:
     )).scalar_one_or_none()
 
 
-def _page_html(title: str, body: str, meta: str = "") -> str:
+_LIRE = {
+    "fr": {"gone_h": "Ce chapitre n'est plus partagé", "gone_p": "Son auteur a coupé le lien, ou il n'existe pas.",
+           "own": "Créer mon propre manga", "gone_t": "Chapitre introuvable — MangaStudio", "ep": "Épisode", "by": "par",
+           "someone": "un auteur", "pages": "pages", "og": "Un manga de {a}, créé avec MangaStudio.", "page": "Page",
+           "you_too": "Vous aussi, racontez votre histoire.", "how": "Décrivez une idée, MangaStudio dessine les pages.",
+           "cta": "Créer mon manga gratuitement"},
+    "en": {"gone_h": "This chapter is no longer shared", "gone_p": "Its author turned off the link, or it doesn't exist.",
+           "own": "Create my own manga", "gone_t": "Chapter not found — MangaStudio", "ep": "Episode", "by": "by",
+           "someone": "an author", "pages": "pages", "og": "A manga by {a}, made with MangaStudio.", "page": "Page",
+           "you_too": "Tell your own story too.", "how": "Describe an idea, MangaStudio draws the pages.",
+           "cta": "Create my manga for free"},
+}
+
+
+def _page_html(title: str, body: str, meta: str = "", lang: str = "fr") -> str:
     return f"""<!DOCTYPE html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="{lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex"><title>{title}</title>{meta}
 <style>
 body{{margin:0;background:#F7F3EA;color:#14110F;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.5}}
@@ -81,39 +95,44 @@ footer{{text-align:center;padding-bottom:48px}}
 
 @router.get("/lire/{token}", response_class=HTMLResponse, include_in_schema=False)
 async def read_shared(token: str, session: AsyncSession = Depends(get_session)):
-    """Page de lecture publique. Rendue par le serveur pour que WhatsApp et Facebook affichent l'aperçu."""
+    """Page de lecture publique. Rendue par le serveur pour que WhatsApp et Facebook affichent l'aperçu.
+    Elle est dans la langue de l'histoire (celle des dialogues) ; un lien introuvable suit la langue du visiteur."""
     e = await _shared(session, token)
     inscription = f"{app_url()}/inscription"
     if not e:
+        t = _LIRE["en" if i18n.lang() == "en" else "fr"]
         body = (f'<header><a class="marque" href="{app_url()}">Manga<span>Studio</span></a></header>'
-                '<main><h1>Ce chapitre n\'est plus partagé</h1><p class="sous">Son auteur a coupé le lien, ou il n\'existe pas.</p>'
-                f'<p><a class="cta" href="{inscription}">Créer mon propre manga</a></p></main>')
-        return HTMLResponse(_page_html("Chapitre introuvable — MangaStudio", body), status_code=404)
+                f'<main><h1>{t["gone_h"]}</h1><p class="sous">{t["gone_p"]}</p>'
+                f'<p><a class="cta" href="{inscription}">{t["own"]}</a></p></main>')
+        return HTMLResponse(_page_html(t["gone_t"], body, lang=i18n.lang()), status_code=404)
+    lang = "en" if e.series.language == "en" else "fr"
+    t = _LIRE[lang]
     owner = await session.get(User, e.series.owner_id)
     if owner:      # le bouton d'inscription porte le code de parrainage de l'auteur
         inscription = f"{inscription}?ref={await growth.ensure_code(session, owner)}"
         await session.commit()
     serie = html.escape(e.series.title or "Manga")
-    titre = f"{serie} — Épisode {e.number}" + (f" : {html.escape(e.title)}" if e.title else "")
-    auteur = html.escape(owner.display_name) if owner else "un auteur"
+    titre = f"{serie} — {t['ep']} {e.number}" + (f" : {html.escape(e.title)}" if e.title else "")
+    auteur = html.escape(owner.display_name) if owner else t["someone"]
     pages = [p for p in e.pages if p.image_path]
     image = storage.url(e.series.cover_path) or (storage.url(pages[0].image_path) if pages else None)
     resume = html.escape((e.summary or e.series.premise or "")[:200])
     lien = share_url(token)
     meta = (f'<meta name="description" content="{resume}">'
             f'<meta property="og:type" content="article"><meta property="og:site_name" content="MangaStudio">'
-            f'<meta property="og:title" content="{titre}"><meta property="og:description" content="Un manga de {auteur}, créé avec MangaStudio. {resume}">'
+            f'<meta property="og:title" content="{titre}"><meta property="og:description" content="{t["og"].format(a=auteur)} {resume}">'
+            f'<meta property="og:locale" content="{"en_GB" if lang == "en" else "fr_FR"}">'
             f'<meta property="og:url" content="{lien}">'
             + (f'<meta property="og:image" content="{image}"><meta name="twitter:card" content="summary_large_image">' if image else ""))
     images = "".join(
-        f'<img src="{storage.url(p.image_path)}" alt="Page {p.number}" loading="{"eager" if i < 2 else "lazy"}">'
+        f'<img src="{storage.url(p.image_path)}" alt="{t["page"]} {p.number}" loading="{"eager" if i < 2 else "lazy"}">'
         for i, p in enumerate(pages))
     body = (f'<header><a class="marque" href="{app_url()}">Manga<span>Studio</span></a>'
-            f'<h1>{titre}</h1><p class="sous">par {auteur} · {len(pages)} pages</p></header>'
+            f'<h1>{titre}</h1><p class="sous">{t["by"]} {auteur} · {len(pages)} {t["pages"]}</p></header>'
             f'<main>{images}</main>'
-            f'<footer><p><b>Vous aussi, racontez votre histoire.</b><br>Décrivez une idée, MangaStudio dessine les pages.</p>'
-            f'<a class="cta" href="{inscription}">Créer mon manga gratuitement</a></footer>')
-    return HTMLResponse(_page_html(f"{titre} — MangaStudio", body, meta))
+            f'<footer><p><b>{t["you_too"]}</b><br>{t["how"]}</p>'
+            f'<a class="cta" href="{inscription}">{t["cta"]}</a></footer>')
+    return HTMLResponse(_page_html(f"{titre} — MangaStudio", body, meta, lang))
 
 
 # ---------- PDF ----------
@@ -158,9 +177,12 @@ async def download_pdf(episode_id: str, user: User = Depends(verified_user), ses
             images.append(await storage.load(p.image_path) if p.image_path else None)
         except OSError:
             images.append(None)
-    titre = f"{e.series.title or 'Manga'} — Épisode {e.number}"
+    en = (user.locale or i18n.lang()) == "en"
+    titre = f"{e.series.title or 'Manga'} — {'Episode' if en else 'Épisode'} {e.number}"
+    code = await growth.ensure_code(session, user)
+    site = app_url().split("://")[-1]
     data = await asyncio.to_thread(pdf.build, images, watermark=quota["watermark"], title=titre,
-                                   mention=f"Créé avec MangaStudio · {app_url().split('://')[-1]} · code {await growth.ensure_code(session, user)}")
+                                   mention=f"Made with MangaStudio · {site} · code {code}" if en else f"Créé avec MangaStudio · {site} · code {code}")
     session.add(PdfDownload(user_id=user.id, episode_id=e.id, watermark=quota["watermark"]))
     await session.commit()
     nom = f"{e.series.title or 'manga'} - episode {e.number}.pdf"
