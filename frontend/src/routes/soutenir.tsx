@@ -93,7 +93,7 @@ function SoutenirPage() {
       {avecDirects && (
         <section className="mt-10">
           <h2 className="mb-2 font-display text-[24px] leading-[30px]">{tr("Sans compte : dépôt direct", "Without an account: direct transfer")}</h2>
-          <p className="mb-4 text-encre-douce">{tr("Envoyez votre don directement depuis votre téléphone. Vérifiez le nom du destinataire avant de valider.", "Send your donation directly from your phone. Check the recipient's name before confirming.")}</p>
+          <p className="mb-4 text-encre-douce">{tr("Envoyez votre don directement depuis votre téléphone. Écrivez-nous avant d'envoyer vos dons par cette voie.", "Send your donation directly from your phone. Please write to us before sending a donation this way.")}</p>
           <div className="grid gap-4 sm:grid-cols-2">
             {directs.filter(([, d]) => d.numero).map(([nom, d]) => (
               <Card key={nom}>
